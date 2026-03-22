@@ -16,6 +16,8 @@ function App() {
     () => hostname.length > 0 && hostname !== 'unsupported',
     [hostname],
   )
+  const isLoading = useMemo(() => hostname.length === 0, [hostname])
+  const isUnsupported = useMemo(() => hostname === 'unsupported', [hostname])
 
   useEffect(() => {
     const init = async (): Promise<void> => {
@@ -50,13 +52,14 @@ function App() {
   const onToggle = async (nextEnabled: boolean): Promise<void> => {
     if (!ready || tabId === null) return
 
+    const currentHost = hostname
     const sites = await disabledSites.getValue()
     const currentSet = new Set(sites)
 
     if (nextEnabled) {
-      currentSet.delete(hostname)
+      currentSet.delete(currentHost)
     } else {
-      currentSet.add(hostname)
+      currentSet.add(currentHost)
     }
 
     await disabledSites.setValue([...currentSet])
@@ -69,44 +72,82 @@ function App() {
       // Roll back UI and storage if content script is unreachable
       const rollbackSet = new Set(await disabledSites.getValue())
       if (nextEnabled) {
-        rollbackSet.add(hostname)
+        rollbackSet.add(currentHost)
       } else {
-        rollbackSet.delete(hostname)
+        rollbackSet.delete(currentHost)
       }
       await disabledSites.setValue([...rollbackSet])
       setEnabled(!nextEnabled)
     }
   }
 
-  const hostLabel =
-    hostname === 'unsupported' ? 'Unsupported page' : hostname || 'Loading...'
+  const hostLabel = isUnsupported ? 'Unsupported page' : hostname || 'Loading...'
+  const statusLabel = isLoading ? 'Loading' : ready ? (enabled ? 'On' : 'Off') : 'N/A'
+  const helperText = isLoading
+    ? 'Detecting active tab...'
+    : ready
+      ? 'Click any image to open the zoom overlay.'
+      : 'This page does not allow zoom control.'
 
   return (
-    <main className="min-w-[280px] bg-zinc-900 p-4 text-zinc-100">
-      <h1 className="text-sm font-semibold text-white">Image Zoom</h1>
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-xs text-zinc-400">Site</span>
-        <span className="max-w-[180px] truncate text-xs font-medium text-zinc-200">
-          {hostLabel}
+    <main className="min-w-[300px] bg-zinc-950 p-4 text-zinc-100">
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Image Zoom</p>
+          <h1 className="mt-1 text-base font-semibold text-white">Site control</h1>
+        </div>
+        <span
+          className={`rounded-full px-2 py-1 text-[11px] font-medium ${
+            isLoading
+              ? 'bg-zinc-800 text-zinc-300'
+              : ready
+                ? enabled
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : 'bg-zinc-800 text-zinc-200'
+                : 'bg-amber-500/15 text-amber-300'
+          }`}
+        >
+          {statusLabel}
         </span>
-      </div>
+      </header>
 
-      <label
-        className={`mt-3 flex items-center justify-between gap-2 ${ready ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
-        aria-disabled={!ready}
+      <section className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+        <p className="text-[11px] text-zinc-500">Current site</p>
+        <p className="mt-1 truncate text-sm font-medium text-zinc-100">{hostLabel}</p>
+      </section>
+
+      <section
+        className={`mt-3 rounded-xl border border-zinc-800 p-3 ${
+          ready ? 'bg-zinc-900/40' : 'bg-zinc-900/20 opacity-70'
+        }`}
       >
-        <span className="text-xs text-zinc-400">Enable on this site</span>
-        <input
-          type="checkbox"
-          className={`h-4 w-4 accent-blue-500 ${ready ? 'cursor-pointer' : 'cursor-not-allowed'}`}
-          checked={enabled}
-          disabled={!ready}
-          onChange={(e) => {
-            void onToggle(e.target.checked)
-          }}
-        />
-      </label>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-zinc-100">Enable zoom</p>
+            <p className="mt-1 text-xs text-zinc-400">{helperText}</p>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Enable zoom on this site"
+            disabled={!ready}
+            onClick={() => {
+              void onToggle(!enabled)
+            }}
+            className={`relative h-7 w-12 rounded-full transition-colors duration-200 ${
+              ready ? (enabled ? 'bg-blue-500' : 'bg-zinc-700') : 'bg-zinc-800'
+            } ${ready ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+          >
+            <span
+              className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white transition-transform duration-200 ${
+                enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+      </section>
     </main>
   )
 }

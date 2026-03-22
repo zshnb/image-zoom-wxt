@@ -48,10 +48,16 @@ export default defineContentScript({
       img.src = src
       img.alt = alt
 
+      let scale = 1
+      overlay.addEventListener('wheel', (e) => {
+        e.preventDefault()
+        scale *= e.deltaY < 0 ? 1.15 : 1 / 1.15
+        scale = Math.max(0.2, Math.min(10, scale))
+        img.style.transform = `scale(${scale})`
+      }, { passive: false })
+
       overlay.appendChild(img)
       document.body.appendChild(overlay)
-
-      overlay.addEventListener('click', closeOverlay)
     }
 
     function closeOverlay(): void {
@@ -73,6 +79,12 @@ export default defineContentScript({
 
     function handleClick(e: MouseEvent): void {
       if (!enabled) return
+      if (document.getElementById(OVERLAY_ID)) {
+        e.preventDefault()
+        e.stopPropagation()
+        closeOverlay()
+        return
+      }
       const target = e.target as HTMLElement
       if (!target.classList.contains(HOVERABLE_CLASS)) return
       e.preventDefault()
@@ -92,11 +104,13 @@ export default defineContentScript({
 
     function addHoverable(el: HTMLElement): void {
       if (!(el instanceof HTMLImageElement)) return
+      if (el.closest('a')) return
+      if (el.closest(`#${OVERLAY_ID}`)) return
       if (isVisibleImage(el)) {
         el.classList.add(HOVERABLE_CLASS)
       } else if (!el.complete) {
         el.addEventListener('load', () => {
-          if (enabled && isVisibleImage(el)) el.classList.add(HOVERABLE_CLASS)
+          if (enabled && isVisibleImage(el) && !el.closest('a')) el.classList.add(HOVERABLE_CLASS)
         }, { once: true })
       }
     }
