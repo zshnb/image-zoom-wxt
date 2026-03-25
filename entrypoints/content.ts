@@ -33,6 +33,8 @@ export default defineContentScript({
       #${OVERLAY_ID} img {
         max-width: 90vw; max-height: 90vh; object-fit: contain;
         user-select: none;
+        transform-origin: center center;
+        will-change: transform;
       }
     `
     document.head.appendChild(style)
@@ -48,12 +50,31 @@ export default defineContentScript({
       img.src = src
       img.alt = alt
 
-      let scale = 1
+      let currentScale = 1
+      let targetScale = 1
+      let animationFrame = 0
+
+      const applyScale = (): void => {
+        animationFrame = 0
+        const delta = targetScale - currentScale
+
+        if (Math.abs(delta) < 0.001) {
+          currentScale = targetScale
+        } else {
+          currentScale += delta * 0.18
+          animationFrame = requestAnimationFrame(applyScale)
+        }
+
+        img.style.transform = `translateZ(0) scale(${currentScale})`
+      }
+
       overlay.addEventListener('wheel', (e) => {
         e.preventDefault()
-        scale *= e.deltaY < 0 ? 1.15 : 1 / 1.15
-        scale = Math.max(0.2, Math.min(10, scale))
-        img.style.transform = `scale(${scale})`
+        targetScale *= e.deltaY < 0 ? 1.12 : 1 / 1.12
+        targetScale = Math.max(0.2, Math.min(10, targetScale))
+        if (!animationFrame) {
+          animationFrame = requestAnimationFrame(applyScale)
+        }
       }, { passive: false })
 
       overlay.appendChild(img)
@@ -85,6 +106,7 @@ export default defineContentScript({
         closeOverlay()
         return
       }
+      if (!e.altKey) return
       const target = e.target as HTMLElement
       if (!target.classList.contains(HOVERABLE_CLASS)) return
       e.preventDefault()
