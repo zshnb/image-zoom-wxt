@@ -35,6 +35,7 @@ export default defineContentScript({
         user-select: none;
         transform-origin: center center;
         will-change: transform;
+        touch-action: none;
       }
     `
     document.head.appendChild(style)
@@ -49,10 +50,22 @@ export default defineContentScript({
       const img = document.createElement('img')
       img.src = src
       img.alt = alt
+      img.draggable = false
 
       let currentScale = 1
       let targetScale = 1
+      let translateX = 0
+      let translateY = 0
       let animationFrame = 0
+      let activePointerId: number | null = null
+      let dragStartX = 0
+      let dragStartY = 0
+      let dragOriginX = 0
+      let dragOriginY = 0
+
+      const renderTransform = (): void => {
+        img.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${currentScale})`
+      }
 
       const applyScale = (): void => {
         animationFrame = 0
@@ -65,8 +78,10 @@ export default defineContentScript({
           animationFrame = requestAnimationFrame(applyScale)
         }
 
-        img.style.transform = `translateZ(0) scale(${currentScale})`
+        renderTransform()
       }
+
+      renderTransform()
 
       overlay.addEventListener('wheel', (e) => {
         e.preventDefault()
@@ -76,6 +91,47 @@ export default defineContentScript({
           animationFrame = requestAnimationFrame(applyScale)
         }
       }, { passive: false })
+
+      img.addEventListener('pointerdown', (e) => {
+        if (currentScale <= 1) return
+        e.preventDefault()
+        activePointerId = e.pointerId
+        dragStartX = e.clientX
+        dragStartY = e.clientY
+        dragOriginX = translateX
+        dragOriginY = translateY
+        overlay.dataset.dragMoved = 'false'
+        img.setPointerCapture(e.pointerId)
+        overlay.style.cursor = 'grabbing'
+      })
+
+      img.addEventListener('pointermove', (e) => {
+        if (activePointerId !== e.pointerId) return
+        translateX = dragOriginX + (e.clientX - dragStartX)
+        translateY = dragOriginY + (e.clientY - dragStartY)
+        if (
+          Math.abs(e.clientX - dragStartX) > 3
+          || Math.abs(e.clientY - dragStartY) > 3
+        ) {
+          overlay.dataset.dragMoved = 'true'
+        }
+        renderTransform()
+      })
+
+      const stopDragging = (e: PointerEvent): void => {
+        if (activePointerId !== e.pointerId) return
+        if (img.hasPointerCapture(e.pointerId)) {
+          img.releasePointerCapture(e.pointerId)
+        }
+        activePointerId = null
+        overlay.style.cursor = 'zoom-out'
+      }
+
+      img.addEventListener('pointerup', stopDragging)
+      img.addEventListener('pointercancel', stopDragging)
+      img.addEventListener('dragstart', (e) => {
+        e.preventDefault()
+      })
 
       overlay.appendChild(img)
       document.body.appendChild(overlay)
@@ -100,13 +156,22 @@ export default defineContentScript({
 
     function handleClick(e: MouseEvent): void {
       if (!enabled) return
-      if (document.getElementById(OVERLAY_ID)) {
+      const overlay = document.getElementById(OVERLAY_ID)
+      if (overlay) {
+        const target = e.target as HTMLElement
+        if (overlay instanceof HTMLElement && overlay.dataset.dragMoved === 'true') {
+          overlay.dataset.dragMoved = 'false'
+          e.preventDefault()
+          e.stopPropagation()
+          return
+        }
+        if (target.tagName === 'IMG') return
         e.preventDefault()
         e.stopPropagation()
         closeOverlay()
         return
       }
-      if (!e.altKey) return
+      if (!e.shiftKey) return
       const target = e.target as HTMLElement
       if (!target.classList.contains(HOVERABLE_CLASS)) return
       e.preventDefault()
@@ -126,13 +191,12 @@ export default defineContentScript({
 
     function addHoverable(el: HTMLElement): void {
       if (!(el instanceof HTMLImageElement)) return
-      if (el.closest('a')) return
       if (el.closest(`#${OVERLAY_ID}`)) return
       if (isVisibleImage(el)) {
         el.classList.add(HOVERABLE_CLASS)
       } else if (!el.complete) {
         el.addEventListener('load', () => {
-          if (enabled && isVisibleImage(el) && !el.closest('a')) el.classList.add(HOVERABLE_CLASS)
+          if (enabled && isVisibleImage(el)) el.classList.add(HOVERABLE_CLASS)
         }, { once: true })
       }
     }
