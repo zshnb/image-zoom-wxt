@@ -18,12 +18,14 @@ export default defineContentScript({
     let enabled = !sites.includes(hostname)
 
     const HOVERABLE_CLASS = 'image-zoom-hoverable'
+    const TRIGGER_ACTIVE_CLASS = 'image-zoom-trigger-active'
     const OVERLAY_ID = 'image-zoom-overlay'
+    const IMAGE_TRIGGER_CONTAINER_SELECTOR = 'button, [role="button"]'
 
     // --- CSS injection ---
     const style = document.createElement('style')
     style.textContent = `
-      .${HOVERABLE_CLASS} { cursor: zoom-in !important; }
+      html.${TRIGGER_ACTIVE_CLASS} .${HOVERABLE_CLASS} { cursor: zoom-in !important; }
       #${OVERLAY_ID} {
         position: fixed; inset: 0; z-index: 2147483647;
         background: rgba(0, 0, 0, 0.85);
@@ -39,6 +41,10 @@ export default defineContentScript({
       }
     `
     document.head.appendChild(style)
+
+    function setTriggerActive(active: boolean): void {
+      document.documentElement.classList.toggle(TRIGGER_ACTIVE_CLASS, enabled && active)
+    }
 
     // --- Overlay ---
     function openOverlay(src: string, alt: string): void {
@@ -154,6 +160,18 @@ export default defineContentScript({
       return ''
     }
 
+    function getClickImageTarget(target: HTMLElement): HTMLImageElement | null {
+      if (target instanceof HTMLImageElement && target.classList.contains(HOVERABLE_CLASS)) {
+        return target
+      }
+
+      const container = target.closest<HTMLElement>(IMAGE_TRIGGER_CONTAINER_SELECTOR)
+      if (!container) return null
+
+      const images = container.querySelectorAll<HTMLImageElement>(`img.${HOVERABLE_CLASS}`)
+      return images.length === 1 ? images[0] : null
+    }
+
     function handleClick(e: MouseEvent): void {
       if (!enabled) return
       const overlay = document.getElementById(OVERLAY_ID)
@@ -173,11 +191,12 @@ export default defineContentScript({
       }
       if (!e.shiftKey) return
       const target = e.target as HTMLElement
-      if (!target.classList.contains(HOVERABLE_CLASS)) return
+      const imageTarget = getClickImageTarget(target)
+      if (!imageTarget) return
       e.preventDefault()
       e.stopPropagation()
-      const src = getImageSrc(target)
-      if (src) openOverlay(src, getImageAlt(target))
+      const src = getImageSrc(imageTarget)
+      if (src) openOverlay(src, getImageAlt(imageTarget))
     }
 
     // --- Hover class management ---
@@ -235,9 +254,26 @@ export default defineContentScript({
     // --- Enable/disable ---
     function applyEnabled(value: boolean): void {
       enabled = value
+      setTriggerActive(false)
       scanImages()
       if (!value) closeOverlay()
     }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Shift') setTriggerActive(true)
+    }, true)
+
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'Shift') setTriggerActive(false)
+    }, true)
+
+    window.addEventListener('blur', () => {
+      setTriggerActive(false)
+    })
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) setTriggerActive(false)
+    })
 
     // Listen for toggle messages sent directly from popup via tabs.sendMessage
     browser.runtime.onMessage.addListener((msg: unknown) => {

@@ -86,7 +86,7 @@ function App() {
   const helperText = isLoading
     ? 'Detecting active tab...'
     : ready
-      ? 'Click any image to open the zoom overlay.'
+      ? 'Hold Shift and click an image to open the zoom overlay.'
       : 'This page does not allow zoom control.'
 
   return (
