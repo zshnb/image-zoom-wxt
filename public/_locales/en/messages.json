@@ -1,0 +1,84 @@
+{
+  "extName": {
+    "message": "Image Zoom Viewer",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and sharp upscaling.",
+    "description": "Short extension description"
+  },
+  "popupHeadline": {
+    "message": "Inspect web images in place.",
+    "description": "Popup headline"
+  },
+  "popupDescription": {
+    "message": "Open a clean overlay, zoom with the wheel, then drag details without leaving the page.",
+    "description": "Popup product description"
+  },
+  "popupActivationKey": {
+    "message": "Activation key",
+    "description": "Shortcut selector label"
+  },
+  "popupShortcutSaving": {
+    "message": "Saving",
+    "description": "Shortcut saving state"
+  },
+  "popupShortcutSaved": {
+    "message": "Saved",
+    "description": "Shortcut saved state"
+  },
+  "popupShortcutError": {
+    "message": "Try again",
+    "description": "Shortcut save error state"
+  },
+  "popupShortcutDefault": {
+    "message": "Default is $KEY$",
+    "description": "Default shortcut hint",
+    "placeholders": {
+      "key": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupShortcutHint": {
+    "message": "Use $KEY$ and click an image to open the zoom overlay.",
+    "description": "Shortcut usage hint",
+    "placeholders": {
+      "key": {
+        "content": "$1"
+      }
+    }
+  },
+  "shortcutShiftLeft": {
+    "message": "Left Shift",
+    "description": "Left Shift key label"
+  },
+  "shortcutShiftRight": {
+    "message": "Right Shift",
+    "description": "Right Shift key label"
+  },
+  "shortcutAltLeft": {
+    "message": "Left Alt",
+    "description": "Left Alt key label"
+  },
+  "shortcutAltRight": {
+    "message": "Right Alt",
+    "description": "Right Alt key label"
+  },
+  "shortcutControlLeft": {
+    "message": "Left Ctrl",
+    "description": "Left Control key label"
+  },
+  "shortcutControlRight": {
+    "message": "Right Ctrl",
+    "description": "Right Control key label"
+  },
+  "shortcutMetaLeft": {
+    "message": "Left Command",
+    "description": "Left Meta key label"
+  },
+  "shortcutMetaRight": {
+    "message": "Right Command",
+    "description": "Right Meta key label"
+  }
+}

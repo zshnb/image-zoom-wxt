@@ -1,8 +1,8 @@
 {
   "name": "image-zoom-wxt",
-  "description": "Click any image to view it fullscreen with a zoom overlay",
+  "description": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and sharp upscaling.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",

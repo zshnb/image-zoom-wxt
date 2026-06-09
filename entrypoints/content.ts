@@ -1,6 +1,13 @@
-import { disabledSites } from '@/utils/storage'
+import {
+  DEFAULT_TRIGGER_SHORTCUT,
+  disabledSites,
+  isTriggerShortcutCode,
+  triggerShortcut,
+  type TriggerShortcutCode,
+} from '@/utils/storage'
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
+type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
 type ResizeWeight = { indices: number[]; weights: number[] }
 type ZoomOverlayElement = HTMLDivElement & { cleanupImageZoom?: () => void }
 
@@ -13,6 +20,12 @@ function isToggleMessage(msg: unknown): msg is ToggleMessage {
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
   return candidate.type === 'TOGGLE_ZOOM' && typeof candidate.enabled === 'boolean'
+}
+
+function isShortcutMessage(msg: unknown): msg is ShortcutMessage {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return candidate.type === 'UPDATE_SHORTCUT' && isTriggerShortcutCode(candidate.shortcut)
 }
 
 function sinc(value: number): number {
@@ -173,8 +186,15 @@ export default defineContentScript({
 
   async main() {
     const hostname = location.hostname
-    const sites = await disabledSites.getValue()
+    const [sites, storedShortcut] = await Promise.all([
+      disabledSites.getValue(),
+      triggerShortcut.getValue(),
+    ])
     let enabled = !sites.includes(hostname)
+    let activeShortcut = isTriggerShortcutCode(storedShortcut)
+      ? storedShortcut
+      : DEFAULT_TRIGGER_SHORTCUT
+    let shortcutPressed = false
 
     const HOVERABLE_CLASS = 'image-zoom-hoverable'
     const TRIGGER_ACTIVE_CLASS = 'image-zoom-trigger-active'
@@ -203,6 +223,16 @@ export default defineContentScript({
 
     function setTriggerActive(active: boolean): void {
       document.documentElement.classList.toggle(TRIGGER_ACTIVE_CLASS, enabled && active)
+    }
+
+    function releaseShortcut(): void {
+      shortcutPressed = false
+      setTriggerActive(false)
+    }
+
+    function setActiveShortcut(shortcut: TriggerShortcutCode): void {
+      activeShortcut = shortcut
+      releaseShortcut()
     }
 
     // --- Overlay ---
@@ -504,7 +534,7 @@ export default defineContentScript({
         closeOverlay()
         return
       }
-      if (!e.shiftKey) return
+      if (!shortcutPressed) return
       const target = e.target as HTMLElement
       const imageTarget = getClickImageTarget(target)
       if (!imageTarget) return
@@ -575,19 +605,27 @@ export default defineContentScript({
     }
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Shift') setTriggerActive(true)
+      if (e.code !== activeShortcut) return
+      shortcutPressed = true
+      setTriggerActive(true)
     }, true)
 
     document.addEventListener('keyup', (e) => {
-      if (e.key === 'Shift') setTriggerActive(false)
+      if (e.code === activeShortcut) releaseShortcut()
     }, true)
 
     window.addEventListener('blur', () => {
-      setTriggerActive(false)
+      releaseShortcut()
     })
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) setTriggerActive(false)
+      if (document.hidden) releaseShortcut()
+    })
+
+    triggerShortcut.watch((nextShortcut) => {
+      setActiveShortcut(
+        isTriggerShortcutCode(nextShortcut) ? nextShortcut : DEFAULT_TRIGGER_SHORTCUT,
+      )
     })
 
     // Listen for toggle messages sent directly from popup via tabs.sendMessage
@@ -595,9 +633,13 @@ export default defineContentScript({
       if (isToggleMessage(msg)) {
         applyEnabled(msg.enabled)
       }
+
+      if (isShortcutMessage(msg)) {
+        setActiveShortcut(msg.shortcut)
+      }
     })
 
-    // Initial scan — runs at document_idle after DOM is ready
+    // Initial scan - runs at document_idle after DOM is ready
     scanImages()
   },
 })

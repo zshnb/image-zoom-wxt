@@ -1,152 +1,133 @@
 import { useEffect, useMemo, useState } from 'react'
-import { disabledSites } from '@/utils/storage'
+import {
+  DEFAULT_TRIGGER_SHORTCUT,
+  isTriggerShortcutCode,
+  triggerShortcut,
+  triggerShortcuts,
+  type TriggerShortcutCode,
+} from '@/utils/storage'
 
-type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
+type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type MessageName = Parameters<typeof browser.i18n.getMessage>[0]
 
-function isSupportedTabUrl(url: string): boolean {
-  return url.startsWith('http://') || url.startsWith('https://')
+function t(name: MessageName, substitutions?: string | string[]): string {
+  return browser.i18n.getMessage(name, substitutions) || name
+}
+
+function getShortcutLabel(code: TriggerShortcutCode): string {
+  const shortcut = triggerShortcuts.find((item) => item.code === code) ?? triggerShortcuts[0]
+  return t(shortcut.messageName)
 }
 
 function App() {
   const [tabId, setTabId] = useState<number | null>(null)
-  const [hostname, setHostname] = useState<string>('')
-  const [enabled, setEnabled] = useState<boolean>(true)
+  const [shortcutCode, setShortcutCode] = useState<TriggerShortcutCode>(DEFAULT_TRIGGER_SHORTCUT)
+  const [shortcutState, setShortcutState] = useState<SaveState>('idle')
 
-  const ready = useMemo(
-    () => hostname.length > 0 && hostname !== 'unsupported',
-    [hostname],
-  )
-  const isLoading = useMemo(() => hostname.length === 0, [hostname])
-  const isUnsupported = useMemo(() => hostname === 'unsupported', [hostname])
+  const shortcutLabel = useMemo(() => getShortcutLabel(shortcutCode), [shortcutCode])
 
   useEffect(() => {
     const init = async (): Promise<void> => {
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
-      const url = tab?.url
-      if (!url || !isSupportedTabUrl(url) || !tab.id) {
-        setHostname('unsupported')
-        setEnabled(false)
-        return
-      }
+      const [[tab], storedShortcut] = await Promise.all([
+        browser.tabs.query({ active: true, currentWindow: true }),
+        triggerShortcut.getValue(),
+      ])
 
-      const current = new URL(url).hostname
-      if (!current) {
-        setHostname('unsupported')
-        setEnabled(false)
-        return
-      }
-
-      setTabId(tab.id)
-      setHostname(current)
-
-      const sites = await disabledSites.getValue()
-      setEnabled(!sites.includes(current))
+      setShortcutCode(
+        isTriggerShortcutCode(storedShortcut) ? storedShortcut : DEFAULT_TRIGGER_SHORTCUT,
+      )
+      setTabId(tab?.id ?? null)
     }
 
     void init().catch(() => {
-      setHostname('unsupported')
-      setEnabled(false)
+      setTabId(null)
     })
   }, [])
 
-  const onToggle = async (nextEnabled: boolean): Promise<void> => {
-    if (!ready || tabId === null) return
+  const notifyShortcutChanged = async (nextShortcut: TriggerShortcutCode): Promise<void> => {
+    if (tabId === null) return
 
-    const currentHost = hostname
-    const sites = await disabledSites.getValue()
-    const currentSet = new Set(sites)
-
-    if (nextEnabled) {
-      currentSet.delete(currentHost)
-    } else {
-      currentSet.add(currentHost)
-    }
-
-    await disabledSites.setValue([...currentSet])
-    setEnabled(nextEnabled)
-
-    const message: ToggleMessage = { type: 'TOGGLE_ZOOM', enabled: nextEnabled }
+    const message: ShortcutMessage = { type: 'UPDATE_SHORTCUT', shortcut: nextShortcut }
     try {
       await browser.tabs.sendMessage(tabId, message)
     } catch {
-      // Roll back UI and storage if content script is unreachable
-      const rollbackSet = new Set(await disabledSites.getValue())
-      if (nextEnabled) {
-        rollbackSet.add(currentHost)
-      } else {
-        rollbackSet.delete(currentHost)
-      }
-      await disabledSites.setValue([...rollbackSet])
-      setEnabled(!nextEnabled)
+      // Some browser pages cannot receive content-script messages.
     }
   }
 
-  const hostLabel = isUnsupported ? 'Unsupported page' : hostname || 'Loading...'
-  const statusLabel = isLoading ? 'Loading' : ready ? (enabled ? 'On' : 'Off') : 'N/A'
-  const helperText = isLoading
-    ? 'Detecting active tab...'
-    : ready
-      ? 'Hold Shift and click an image to open the zoom overlay.'
-      : 'This page does not allow zoom control.'
+  const onShortcutChange = async (value: string): Promise<void> => {
+    if (!isTriggerShortcutCode(value)) return
+
+    const previousShortcut = shortcutCode
+    setShortcutCode(value)
+    setShortcutState('saving')
+
+    try {
+      await triggerShortcut.setValue(value)
+      await notifyShortcutChanged(value)
+      setShortcutState('saved')
+    } catch {
+      setShortcutCode(previousShortcut)
+      setShortcutState('error')
+    }
+  }
+
+  const shortcutStatusLabel = shortcutState === 'saving'
+    ? t('popupShortcutSaving')
+    : shortcutState === 'saved'
+      ? t('popupShortcutSaved')
+      : shortcutState === 'error'
+        ? t('popupShortcutError')
+        : t('popupShortcutDefault', shortcutLabel)
 
   return (
-    <main className="min-w-[300px] bg-zinc-950 p-4 text-zinc-100">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Image Zoom</p>
-          <h1 className="mt-1 text-base font-semibold text-white">Site control</h1>
-        </div>
-        <span
-          className={`rounded-full px-2 py-1 text-[11px] font-medium ${
-            isLoading
-              ? 'bg-zinc-800 text-zinc-300'
-              : ready
-                ? enabled
-                  ? 'bg-emerald-500/15 text-emerald-300'
-                  : 'bg-zinc-800 text-zinc-200'
-                : 'bg-amber-500/15 text-amber-300'
-          }`}
-        >
-          {statusLabel}
-        </span>
+    <main className="w-[344px] bg-zinc-50 p-4 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
+      <header className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-[0_16px_42px_rgba(24,24,27,0.08)] dark:border-zinc-800 dark:bg-zinc-900">
+        <p className="text-sm font-semibold text-zinc-950 dark:text-white">{t('extName')}</p>
+        <h1 className="mt-2 text-[22px] font-semibold leading-tight text-zinc-950 dark:text-white">
+          {t('popupHeadline')}
+        </h1>
+        <p className="mt-3 text-sm leading-5 text-zinc-600 dark:text-zinc-400">
+          {t('popupDescription')}
+        </p>
       </header>
 
-      <section className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
-        <p className="text-[11px] text-zinc-500">Current site</p>
-        <p className="mt-1 truncate text-sm font-medium text-zinc-100">{hostLabel}</p>
-      </section>
-
-      <section
-        className={`mt-3 rounded-xl border border-zinc-800 p-3 ${
-          ready ? 'bg-zinc-900/40' : 'bg-zinc-900/20 opacity-70'
-        }`}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-zinc-100">Enable zoom</p>
-            <p className="mt-1 text-xs text-zinc-400">{helperText}</p>
-          </div>
-
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label="Enable zoom on this site"
-            disabled={!ready}
-            onClick={() => {
-              void onToggle(!enabled)
-            }}
-            className={`relative h-7 w-12 rounded-full transition-colors duration-200 ${
-              ready ? (enabled ? 'bg-blue-500' : 'bg-zinc-700') : 'bg-zinc-800'
-            } ${ready ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+      <section className="mt-3 rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-end justify-between gap-3">
+          <label className="flex-1">
+            <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500">
+              {t('popupActivationKey')}
+            </span>
+            <select
+              value={shortcutCode}
+              onChange={(event) => {
+                void onShortcutChange(event.target.value)
+              }}
+              className="mt-2 h-10 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-sm font-medium text-zinc-950 outline-none transition-colors focus:border-blue-600 focus:bg-white dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-blue-500"
+            >
+              {triggerShortcuts.map((shortcut) => (
+                <option key={shortcut.code} value={shortcut.code}>
+                  {t(shortcut.messageName)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span
+            className={`pb-2 text-xs font-medium ${
+              shortcutState === 'error'
+                ? 'text-red-600 dark:text-red-300'
+                : shortcutState === 'saved'
+                  ? 'text-blue-700 dark:text-blue-300'
+                  : 'text-zinc-500 dark:text-zinc-400'
+            }`}
           >
-            <span
-              className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white transition-transform duration-200 ${
-                enabled ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+            {shortcutStatusLabel}
+          </span>
         </div>
+        <p className="mt-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+          {t('popupShortcutHint', shortcutLabel)}
+        </p>
       </section>
     </main>
   )

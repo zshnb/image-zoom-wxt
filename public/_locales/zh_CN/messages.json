@@ -1,0 +1,84 @@
+{
+  "extName": {
+    "message": "网页图片放大查看器",
+    "description": "扩展名称"
+  },
+  "extDescription": {
+    "message": "按住快捷键点击网页图片，在当前页面打开放大查看器，支持滚轮缩放、拖动查看和清晰放大。",
+    "description": "扩展短描述"
+  },
+  "popupHeadline": {
+    "message": "就地查看网页图片细节。",
+    "description": "弹窗标题"
+  },
+  "popupDescription": {
+    "message": "打开干净的预览层，用滚轮缩放，再拖动查看细节，不离开当前页面。",
+    "description": "弹窗产品说明"
+  },
+  "popupActivationKey": {
+    "message": "触发按键",
+    "description": "快捷键选择标签"
+  },
+  "popupShortcutSaving": {
+    "message": "保存中",
+    "description": "快捷键保存中状态"
+  },
+  "popupShortcutSaved": {
+    "message": "已保存",
+    "description": "快捷键已保存状态"
+  },
+  "popupShortcutError": {
+    "message": "请重试",
+    "description": "快捷键保存失败状态"
+  },
+  "popupShortcutDefault": {
+    "message": "默认是 $KEY$",
+    "description": "默认快捷键提示",
+    "placeholders": {
+      "key": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupShortcutHint": {
+    "message": "按住 $KEY$ 并点击图片，即可打开放大预览。",
+    "description": "快捷键使用提示",
+    "placeholders": {
+      "key": {
+        "content": "$1"
+      }
+    }
+  },
+  "shortcutShiftLeft": {
+    "message": "左 Shift",
+    "description": "左 Shift 按键标签"
+  },
+  "shortcutShiftRight": {
+    "message": "右 Shift",
+    "description": "右 Shift 按键标签"
+  },
+  "shortcutAltLeft": {
+    "message": "左 Alt",
+    "description": "左 Alt 按键标签"
+  },
+  "shortcutAltRight": {
+    "message": "右 Alt",
+    "description": "右 Alt 按键标签"
+  },
+  "shortcutControlLeft": {
+    "message": "左 Ctrl",
+    "description": "左 Ctrl 按键标签"
+  },
+  "shortcutControlRight": {
+    "message": "右 Ctrl",
+    "description": "右 Ctrl 按键标签"
+  },
+  "shortcutMetaLeft": {
+    "message": "左 Command",
+    "description": "左 Meta 按键标签"
+  },
+  "shortcutMetaRight": {
+    "message": "右 Command",
+    "description": "右 Meta 按键标签"
+  }
+}
