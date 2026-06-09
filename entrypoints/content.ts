@@ -1,11 +1,170 @@
 import { disabledSites } from '@/utils/storage'
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
+type ResizeWeight = { indices: number[]; weights: number[] }
+type ZoomOverlayElement = HTMLDivElement & { cleanupImageZoom?: () => void }
+
+const LANCZOS_RADIUS = 3
+const MAX_LANCZOS_SCALE = 4
+const MAX_LANCZOS_PIXELS = 6_000_000
+const UPSCALE_IDLE_DELAY_MS = 120
 
 function isToggleMessage(msg: unknown): msg is ToggleMessage {
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
   return candidate.type === 'TOGGLE_ZOOM' && typeof candidate.enabled === 'boolean'
+}
+
+function sinc(value: number): number {
+  if (value === 0) return 1
+  const angle = Math.PI * value
+  return Math.sin(angle) / angle
+}
+
+function lanczos3(value: number): number {
+  const x = Math.abs(value)
+  if (x >= LANCZOS_RADIUS) return 0
+  return sinc(x) * sinc(x / LANCZOS_RADIUS)
+}
+
+function createLanczosWeights(sourceSize: number, targetSize: number): ResizeWeight[] {
+  const scale = targetSize / sourceSize
+  const weights: ResizeWeight[] = []
+
+  for (let target = 0; target < targetSize; target += 1) {
+    const sourceCenter = (target + 0.5) / scale - 0.5
+    const start = Math.ceil(sourceCenter - LANCZOS_RADIUS)
+    const end = Math.floor(sourceCenter + LANCZOS_RADIUS)
+    const indices: number[] = []
+    const values: number[] = []
+    let total = 0
+
+    for (let source = start; source <= end; source += 1) {
+      if (source < 0 || source >= sourceSize) continue
+
+      const weight = lanczos3(sourceCenter - source)
+      if (weight === 0) continue
+
+      indices.push(source)
+      values.push(weight)
+      total += weight
+    }
+
+    if (total !== 0) {
+      for (let i = 0; i < values.length; i += 1) {
+        values[i] /= total
+      }
+    }
+
+    weights.push({ indices, weights: values })
+  }
+
+  return weights
+}
+
+function resizeLanczos3(
+  sourceData: Uint8ClampedArray,
+  sourceWidth: number,
+  sourceHeight: number,
+  targetWidth: number,
+  targetHeight: number,
+): Uint8ClampedArray<ArrayBuffer> {
+  const horizontalWeights = createLanczosWeights(sourceWidth, targetWidth)
+  const verticalWeights = createLanczosWeights(sourceHeight, targetHeight)
+  const horizontal = new Float32Array(targetWidth * sourceHeight * 4)
+  const output = new Uint8ClampedArray(targetWidth * targetHeight * 4)
+
+  for (let y = 0; y < sourceHeight; y += 1) {
+    for (let x = 0; x < targetWidth; x += 1) {
+      const { indices, weights } = horizontalWeights[x]
+      const targetOffset = (y * targetWidth + x) * 4
+
+      for (let i = 0; i < indices.length; i += 1) {
+        const sourceOffset = (y * sourceWidth + indices[i]) * 4
+        const weight = weights[i]
+        horizontal[targetOffset] += sourceData[sourceOffset] * weight
+        horizontal[targetOffset + 1] += sourceData[sourceOffset + 1] * weight
+        horizontal[targetOffset + 2] += sourceData[sourceOffset + 2] * weight
+        horizontal[targetOffset + 3] += sourceData[sourceOffset + 3] * weight
+      }
+    }
+  }
+
+  for (let y = 0; y < targetHeight; y += 1) {
+    const { indices, weights } = verticalWeights[y]
+
+    for (let x = 0; x < targetWidth; x += 1) {
+      const targetOffset = (y * targetWidth + x) * 4
+      let red = 0
+      let green = 0
+      let blue = 0
+      let alpha = 0
+
+      for (let i = 0; i < indices.length; i += 1) {
+        const sourceOffset = (indices[i] * targetWidth + x) * 4
+        const weight = weights[i]
+        red += horizontal[sourceOffset] * weight
+        green += horizontal[sourceOffset + 1] * weight
+        blue += horizontal[sourceOffset + 2] * weight
+        alpha += horizontal[sourceOffset + 3] * weight
+      }
+
+      output[targetOffset] = red
+      output[targetOffset + 1] = green
+      output[targetOffset + 2] = blue
+      output[targetOffset + 3] = alpha
+    }
+  }
+
+  return output
+}
+
+async function createLanczosObjectUrl(
+  source: HTMLImageElement,
+  targetWidth: number,
+  targetHeight: number,
+): Promise<string | null> {
+  const sourceWidth = source.naturalWidth
+  const sourceHeight = source.naturalHeight
+  if (sourceWidth < 1 || sourceHeight < 1) return null
+
+  const sourceCanvas = document.createElement('canvas')
+  sourceCanvas.width = sourceWidth
+  sourceCanvas.height = sourceHeight
+
+  const sourceContext = sourceCanvas.getContext('2d')
+  if (!sourceContext) return null
+
+  let imageData: ImageData
+  try {
+    sourceContext.drawImage(source, 0, 0)
+    imageData = sourceContext.getImageData(0, 0, sourceWidth, sourceHeight)
+  } catch {
+    return null
+  }
+
+  const resized = resizeLanczos3(
+    imageData.data,
+    sourceWidth,
+    sourceHeight,
+    targetWidth,
+    targetHeight,
+  )
+
+  const targetCanvas = document.createElement('canvas')
+  targetCanvas.width = targetWidth
+  targetCanvas.height = targetHeight
+
+  const targetContext = targetCanvas.getContext('2d')
+  if (!targetContext) return null
+
+  targetContext.putImageData(new ImageData(resized, targetWidth, targetHeight), 0, 0)
+
+  return new Promise((resolve) => {
+    targetCanvas.toBlob((blob) => {
+      resolve(blob ? URL.createObjectURL(blob) : null)
+    }, 'image/png')
+  })
 }
 
 export default defineContentScript({
@@ -50,11 +209,10 @@ export default defineContentScript({
     function openOverlay(src: string, alt: string): void {
       if (document.getElementById(OVERLAY_ID)) return
 
-      const overlay = document.createElement('div')
+      const overlay = document.createElement('div') as ZoomOverlayElement
       overlay.id = OVERLAY_ID
 
       const img = document.createElement('img')
-      img.src = src
       img.alt = alt
       img.draggable = false
 
@@ -68,9 +226,131 @@ export default defineContentScript({
       let dragStartY = 0
       let dragOriginX = 0
       let dragOriginY = 0
+      let baseWidth = 0
+      let baseHeight = 0
+      let upscaleTimer = 0
+      let upscaleRequestId = 0
+      let renderedUpscaleKey = ''
+      let sourceReady = false
+      let sourceFailed = false
+      let overlayClosed = false
+      const upscaleCache = new Map<string, string>()
+      const sourceImage = new Image()
 
       const renderTransform = (): void => {
         img.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${currentScale})`
+      }
+
+      const restoreOriginalSource = (): void => {
+        if (!renderedUpscaleKey) return
+        renderedUpscaleKey = ''
+        img.src = src
+      }
+
+      const getUpscaleTarget = (): { key: string; width: number; height: number } | null => {
+        if (baseWidth < 1 || baseHeight < 1 || !sourceReady || sourceFailed) return null
+
+        const sourceWidth = sourceImage.naturalWidth
+        const sourceHeight = sourceImage.naturalHeight
+        const sourcePixels = sourceWidth * sourceHeight
+        if (sourceWidth < 1 || sourceHeight < 1 || sourcePixels >= MAX_LANCZOS_PIXELS) return null
+
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+        const wantedWidth = baseWidth * targetScale * pixelRatio
+        const wantedHeight = baseHeight * targetScale * pixelRatio
+        const neededScale = Math.max(wantedWidth / sourceWidth, wantedHeight / sourceHeight)
+
+        if (neededScale < 1.15) return null
+
+        let upscaleScale = Math.min(MAX_LANCZOS_SCALE, Math.ceil(neededScale * 2) / 2)
+        let width = Math.round(sourceWidth * upscaleScale)
+        let height = Math.round(sourceHeight * upscaleScale)
+
+        if (width * height > MAX_LANCZOS_PIXELS) {
+          const cappedScale = Math.sqrt(MAX_LANCZOS_PIXELS / sourcePixels)
+          if (cappedScale <= 1.05) return null
+
+          upscaleScale = Math.min(upscaleScale, cappedScale)
+          width = Math.round(sourceWidth * upscaleScale)
+          height = Math.round(sourceHeight * upscaleScale)
+        }
+
+        if (width <= sourceWidth || height <= sourceHeight) return null
+
+        return {
+          key: `${width}x${height}`,
+          width,
+          height,
+        }
+      }
+
+      const showUpscaledSource = (url: string, key: string): void => {
+        if (renderedUpscaleKey === key) return
+        img.removeAttribute('srcset')
+        renderedUpscaleKey = key
+        img.src = url
+      }
+
+      const applyUpscale = async (): Promise<void> => {
+        if (overlayClosed) return
+
+        const target = getUpscaleTarget()
+        if (!target) {
+          upscaleRequestId += 1
+          restoreOriginalSource()
+          return
+        }
+
+        if (renderedUpscaleKey === target.key) return
+
+        const requestId = upscaleRequestId + 1
+        upscaleRequestId = requestId
+        const cached = upscaleCache.get(target.key)
+        if (cached) {
+          showUpscaledSource(cached, target.key)
+          return
+        }
+
+        const objectUrl = await createLanczosObjectUrl(sourceImage, target.width, target.height)
+
+        if (overlayClosed || requestId !== upscaleRequestId) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl)
+          return
+        }
+
+        if (!objectUrl) {
+          sourceFailed = true
+          restoreOriginalSource()
+          return
+        }
+
+        upscaleCache.set(target.key, objectUrl)
+        showUpscaledSource(objectUrl, target.key)
+      }
+
+      const scheduleUpscale = (): void => {
+        if (overlayClosed) return
+        if (upscaleTimer) window.clearTimeout(upscaleTimer)
+
+        upscaleTimer = window.setTimeout(() => {
+          upscaleTimer = 0
+          void applyUpscale()
+        }, UPSCALE_IDLE_DELAY_MS)
+      }
+
+      const lockBaseSize = (): void => {
+        if (baseWidth > 0 || img.naturalWidth < 1 || img.naturalHeight < 1) return
+
+        const rect = img.getBoundingClientRect()
+        baseWidth = rect.width || img.naturalWidth
+        baseHeight = rect.height || img.naturalHeight
+
+        img.style.width = `${baseWidth}px`
+        img.style.height = `${baseHeight}px`
+        img.style.maxWidth = 'none'
+        img.style.maxHeight = 'none'
+
+        scheduleUpscale()
       }
 
       const applyScale = (): void => {
@@ -87,12 +367,36 @@ export default defineContentScript({
         renderTransform()
       }
 
+      sourceImage.decoding = 'async'
+      try {
+        const sourceUrl = new URL(src, location.href)
+        if (sourceUrl.origin !== location.origin && sourceUrl.protocol !== 'data:' && sourceUrl.protocol !== 'blob:') {
+          sourceImage.crossOrigin = 'anonymous'
+        }
+      } catch {
+        sourceFailed = true
+      }
+      sourceImage.addEventListener('load', () => {
+        sourceReady = true
+        scheduleUpscale()
+      }, { once: true })
+      sourceImage.addEventListener('error', () => {
+        sourceFailed = true
+      }, { once: true })
+      sourceImage.src = src
+
+      img.addEventListener('load', () => {
+        requestAnimationFrame(lockBaseSize)
+      }, { once: true })
+      img.src = src
+
       renderTransform()
 
       overlay.addEventListener('wheel', (e) => {
         e.preventDefault()
         targetScale *= e.deltaY < 0 ? 1.12 : 1 / 1.12
-        targetScale = Math.max(0.2, Math.min(10, targetScale))
+        targetScale = Math.max(1, Math.min(10, targetScale))
+        scheduleUpscale()
         if (!animationFrame) {
           animationFrame = requestAnimationFrame(applyScale)
         }
@@ -139,12 +443,23 @@ export default defineContentScript({
         e.preventDefault()
       })
 
+      overlay.cleanupImageZoom = (): void => {
+        overlayClosed = true
+        upscaleRequestId += 1
+        if (animationFrame) cancelAnimationFrame(animationFrame)
+        if (upscaleTimer) window.clearTimeout(upscaleTimer)
+        upscaleCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
+        upscaleCache.clear()
+      }
+
       overlay.appendChild(img)
       document.body.appendChild(overlay)
     }
 
     function closeOverlay(): void {
-      document.getElementById(OVERLAY_ID)?.remove()
+      const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
+      overlay?.cleanupImageZoom?.()
+      overlay?.remove()
     }
 
     // --- Image click handler ---
