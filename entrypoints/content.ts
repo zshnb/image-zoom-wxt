@@ -1,6 +1,7 @@
 import {
   DEFAULT_TRIGGER_SHORTCUT,
   disabledSites,
+  imageEnhancementEnabled,
   isTriggerShortcutCode,
   triggerShortcut,
   type TriggerShortcutCode,
@@ -8,13 +9,18 @@ import {
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
+type ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT'; enabled: boolean }
 type ResizeWeight = { indices: number[]; weights: number[] }
-type ZoomOverlayElement = HTMLDivElement & { cleanupImageZoom?: () => void }
+type ZoomOverlayElement = HTMLDivElement & {
+  cleanupImageZoom?: () => void
+  setImageEnhancementEnabled?: (enabled: boolean) => void
+}
 
 const LANCZOS_RADIUS = 3
 const MAX_LANCZOS_SCALE = 4
 const MAX_LANCZOS_PIXELS = 6_000_000
 const UPSCALE_IDLE_DELAY_MS = 120
+const RESIZE_YIELD_MS = 12
 
 function isToggleMessage(msg: unknown): msg is ToggleMessage {
   if (typeof msg !== 'object' || msg === null) return false
@@ -26,6 +32,18 @@ function isShortcutMessage(msg: unknown): msg is ShortcutMessage {
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
   return candidate.type === 'UPDATE_SHORTCUT' && isTriggerShortcutCode(candidate.shortcut)
+}
+
+function isImageEnhancementMessage(msg: unknown): msg is ImageEnhancementMessage {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return candidate.type === 'UPDATE_IMAGE_ENHANCEMENT' && typeof candidate.enabled === 'boolean'
+}
+
+function waitForNextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
 }
 
 function sinc(value: number): number {
@@ -75,17 +93,18 @@ function createLanczosWeights(sourceSize: number, targetSize: number): ResizeWei
   return weights
 }
 
-function resizeLanczos3(
+async function resizeLanczos3(
   sourceData: Uint8ClampedArray,
   sourceWidth: number,
   sourceHeight: number,
   targetWidth: number,
   targetHeight: number,
-): Uint8ClampedArray<ArrayBuffer> {
+): Promise<Uint8ClampedArray<ArrayBuffer>> {
   const horizontalWeights = createLanczosWeights(sourceWidth, targetWidth)
   const verticalWeights = createLanczosWeights(sourceHeight, targetHeight)
   const horizontal = new Float32Array(targetWidth * sourceHeight * 4)
   const output = new Uint8ClampedArray(targetWidth * targetHeight * 4)
+  let lastYield = performance.now()
 
   for (let y = 0; y < sourceHeight; y += 1) {
     for (let x = 0; x < targetWidth; x += 1) {
@@ -100,6 +119,11 @@ function resizeLanczos3(
         horizontal[targetOffset + 2] += sourceData[sourceOffset + 2] * weight
         horizontal[targetOffset + 3] += sourceData[sourceOffset + 3] * weight
       }
+    }
+
+    if (performance.now() - lastYield >= RESIZE_YIELD_MS) {
+      await waitForNextFrame()
+      lastYield = performance.now()
     }
   }
 
@@ -126,6 +150,11 @@ function resizeLanczos3(
       output[targetOffset + 1] = green
       output[targetOffset + 2] = blue
       output[targetOffset + 3] = alpha
+    }
+
+    if (performance.now() - lastYield >= RESIZE_YIELD_MS) {
+      await waitForNextFrame()
+      lastYield = performance.now()
     }
   }
 
@@ -156,7 +185,7 @@ async function createLanczosObjectUrl(
     return null
   }
 
-  const resized = resizeLanczos3(
+  const resized = await resizeLanczos3(
     imageData.data,
     sourceWidth,
     sourceHeight,
@@ -186,14 +215,16 @@ export default defineContentScript({
 
   async main() {
     const hostname = location.hostname
-    const [sites, storedShortcut] = await Promise.all([
+    const [sites, storedShortcut, storedImageEnhancementEnabled] = await Promise.all([
       disabledSites.getValue(),
       triggerShortcut.getValue(),
+      imageEnhancementEnabled.getValue(),
     ])
     let enabled = !sites.includes(hostname)
     let activeShortcut = isTriggerShortcutCode(storedShortcut)
       ? storedShortcut
       : DEFAULT_TRIGGER_SHORTCUT
+    let enhancementEnabled = storedImageEnhancementEnabled
     let shortcutPressed = false
 
     const HOVERABLE_CLASS = 'image-zoom-hoverable'
@@ -217,6 +248,27 @@ export default defineContentScript({
         transform-origin: center center;
         will-change: transform;
         touch-action: none;
+      }
+      #${OVERLAY_ID} .image-zoom-loading {
+        position: absolute; top: 24px; left: 50%;
+        transform: translateX(-50%);
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px; border-radius: 999px;
+        background: rgba(24, 24, 27, 0.86);
+        color: #fff;
+        font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        pointer-events: none;
+      }
+      #${OVERLAY_ID} .image-zoom-loading[hidden] { display: none; }
+      #${OVERLAY_ID} .image-zoom-spinner {
+        width: 14px; height: 14px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #fff;
+        border-radius: 999px;
+        animation: image-zoom-spin 0.8s linear infinite;
+      }
+      @keyframes image-zoom-spin {
+        to { transform: rotate(360deg); }
       }
     `
     document.head.appendChild(style)
@@ -246,6 +298,21 @@ export default defineContentScript({
       img.alt = alt
       img.draggable = false
 
+      const loading = document.createElement('div')
+      loading.className = 'image-zoom-loading'
+      loading.hidden = true
+      loading.setAttribute('role', 'status')
+      loading.setAttribute('aria-live', 'polite')
+
+      const spinner = document.createElement('span')
+      spinner.className = 'image-zoom-spinner'
+
+      const loadingLabel = document.createElement('span')
+      loadingLabel.textContent = browser.i18n.getMessage('viewerImageProcessing')
+        || 'Processing image'
+
+      loading.append(spinner, loadingLabel)
+
       let currentScale = 1
       let targetScale = 1
       let translateX = 0
@@ -271,6 +338,10 @@ export default defineContentScript({
         img.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${currentScale})`
       }
 
+      const setLoading = (isLoading: boolean): void => {
+        loading.hidden = !isLoading
+      }
+
       const restoreOriginalSource = (): void => {
         if (!renderedUpscaleKey) return
         renderedUpscaleKey = ''
@@ -278,7 +349,15 @@ export default defineContentScript({
       }
 
       const getUpscaleTarget = (): { key: string; width: number; height: number } | null => {
-        if (baseWidth < 1 || baseHeight < 1 || !sourceReady || sourceFailed) return null
+        if (
+          !enhancementEnabled
+          || baseWidth < 1
+          || baseHeight < 1
+          || !sourceReady
+          || sourceFailed
+        ) {
+          return null
+        }
 
         const sourceWidth = sourceImage.naturalWidth
         const sourceHeight = sourceImage.naturalHeight
@@ -327,21 +406,37 @@ export default defineContentScript({
         const target = getUpscaleTarget()
         if (!target) {
           upscaleRequestId += 1
+          setLoading(false)
           restoreOriginalSource()
           return
         }
 
-        if (renderedUpscaleKey === target.key) return
+        if (renderedUpscaleKey === target.key) {
+          setLoading(false)
+          return
+        }
 
         const requestId = upscaleRequestId + 1
         upscaleRequestId = requestId
         const cached = upscaleCache.get(target.key)
         if (cached) {
+          setLoading(false)
           showUpscaledSource(cached, target.key)
           return
         }
 
-        const objectUrl = await createLanczosObjectUrl(sourceImage, target.width, target.height)
+        let objectUrl: string | null = null
+        try {
+          setLoading(true)
+          await waitForNextFrame()
+          objectUrl = await createLanczosObjectUrl(sourceImage, target.width, target.height)
+        } catch {
+          objectUrl = null
+        } finally {
+          if (!overlayClosed && requestId === upscaleRequestId) {
+            setLoading(false)
+          }
+        }
 
         if (overlayClosed || requestId !== upscaleRequestId) {
           if (objectUrl) URL.revokeObjectURL(objectUrl)
@@ -360,6 +455,7 @@ export default defineContentScript({
 
       const scheduleUpscale = (): void => {
         if (overlayClosed) return
+        if (!enhancementEnabled) return
         if (upscaleTimer) window.clearTimeout(upscaleTimer)
 
         upscaleTimer = window.setTimeout(() => {
@@ -476,13 +572,28 @@ export default defineContentScript({
       overlay.cleanupImageZoom = (): void => {
         overlayClosed = true
         upscaleRequestId += 1
+        setLoading(false)
         if (animationFrame) cancelAnimationFrame(animationFrame)
         if (upscaleTimer) window.clearTimeout(upscaleTimer)
         upscaleCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
         upscaleCache.clear()
       }
 
+      overlay.setImageEnhancementEnabled = (nextEnabled: boolean): void => {
+        if (!nextEnabled) {
+          if (upscaleTimer) window.clearTimeout(upscaleTimer)
+          upscaleTimer = 0
+          upscaleRequestId += 1
+          setLoading(false)
+          restoreOriginalSource()
+          return
+        }
+
+        scheduleUpscale()
+      }
+
       overlay.appendChild(img)
+      overlay.appendChild(loading)
       document.body.appendChild(overlay)
     }
 
@@ -490,6 +601,12 @@ export default defineContentScript({
       const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
       overlay?.cleanupImageZoom?.()
       overlay?.remove()
+    }
+
+    function applyImageEnhancementEnabled(value: boolean): void {
+      enhancementEnabled = value
+      const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
+      overlay?.setImageEnhancementEnabled?.(value)
     }
 
     // --- Image click handler ---
@@ -628,6 +745,10 @@ export default defineContentScript({
       )
     })
 
+    imageEnhancementEnabled.watch((nextEnabled) => {
+      applyImageEnhancementEnabled(nextEnabled !== false)
+    })
+
     // Listen for toggle messages sent directly from popup via tabs.sendMessage
     browser.runtime.onMessage.addListener((msg: unknown) => {
       if (isToggleMessage(msg)) {
@@ -636,6 +757,10 @@ export default defineContentScript({
 
       if (isShortcutMessage(msg)) {
         setActiveShortcut(msg.shortcut)
+      }
+
+      if (isImageEnhancementMessage(msg)) {
+        applyImageEnhancementEnabled(msg.enabled)
       }
     })
 

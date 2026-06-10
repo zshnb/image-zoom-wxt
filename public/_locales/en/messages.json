@@ -4,16 +4,8 @@
     "description": "Extension name"
   },
   "extDescription": {
-    "message": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and sharp upscaling.",
+    "message": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and optional sharp upscaling.",
     "description": "Short extension description"
-  },
-  "popupHeadline": {
-    "message": "Inspect web images in place.",
-    "description": "Popup headline"
-  },
-  "popupDescription": {
-    "message": "Open a clean overlay, zoom with the wheel, then drag details without leaving the page.",
-    "description": "Popup product description"
   },
   "popupActivationKey": {
     "message": "Activation key",
@@ -31,23 +23,13 @@
     "message": "Try again",
     "description": "Shortcut save error state"
   },
-  "popupShortcutDefault": {
-    "message": "Default is $KEY$",
-    "description": "Default shortcut hint",
-    "placeholders": {
-      "key": {
-        "content": "$1"
-      }
-    }
+  "popupImageEnhancement": {
+    "message": "Image clarity algorithm",
+    "description": "Image enhancement switch label"
   },
-  "popupShortcutHint": {
-    "message": "Use $KEY$ and click an image to open the zoom overlay.",
-    "description": "Shortcut usage hint",
-    "placeholders": {
-      "key": {
-        "content": "$1"
-      }
-    }
+  "viewerImageProcessing": {
+    "message": "Sharpening image",
+    "description": "Image enhancement processing label"
   },
   "shortcutShiftLeft": {
     "message": "Left Shift",

@@ -23,6 +23,13 @@ export const triggerShortcut = storage.defineItem<TriggerShortcutCode>('local:tr
   fallback: DEFAULT_TRIGGER_SHORTCUT,
 })
 
+export const imageEnhancementEnabled = storage.defineItem<boolean>(
+  'local:imageEnhancementEnabled',
+  {
+    fallback: true,
+  },
+)
+
 export function isTriggerShortcutCode(value: unknown): value is TriggerShortcutCode {
   return triggerShortcuts.some((shortcut) => shortcut.code === value)
 }

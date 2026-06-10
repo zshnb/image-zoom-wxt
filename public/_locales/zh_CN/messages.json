@@ -4,16 +4,8 @@
     "description": "扩展名称"
   },
   "extDescription": {
-    "message": "按住快捷键点击网页图片，在当前页面打开放大查看器，支持滚轮缩放、拖动查看和清晰放大。",
+    "message": "按住快捷键点击网页图片，在当前页面打开放大查看器，支持滚轮缩放、拖动查看和可选清晰放大。",
     "description": "扩展短描述"
-  },
-  "popupHeadline": {
-    "message": "就地查看网页图片细节。",
-    "description": "弹窗标题"
-  },
-  "popupDescription": {
-    "message": "打开干净的预览层，用滚轮缩放，再拖动查看细节，不离开当前页面。",
-    "description": "弹窗产品说明"
   },
   "popupActivationKey": {
     "message": "触发按键",
@@ -31,23 +23,13 @@
     "message": "请重试",
     "description": "快捷键保存失败状态"
   },
-  "popupShortcutDefault": {
-    "message": "默认是 $KEY$",
-    "description": "默认快捷键提示",
-    "placeholders": {
-      "key": {
-        "content": "$1"
-      }
-    }
+  "popupImageEnhancement": {
+    "message": "图片清晰算法",
+    "description": "清晰算法开关标签"
   },
-  "popupShortcutHint": {
-    "message": "按住 $KEY$ 并点击图片，即可打开放大预览。",
-    "description": "快捷键使用提示",
-    "placeholders": {
-      "key": {
-        "content": "$1"
-      }
-    }
+  "viewerImageProcessing": {
+    "message": "正在提高清晰度",
+    "description": "图片清晰算法处理中提示"
   },
   "shortcutShiftLeft": {
     "message": "左 Shift",
