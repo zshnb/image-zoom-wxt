@@ -348,6 +348,14 @@ export default defineContentScript({
         img.src = src
       }
 
+      const cancelUpscale = (): void => {
+        if (upscaleTimer) window.clearTimeout(upscaleTimer)
+        upscaleTimer = 0
+        upscaleRequestId += 1
+        setLoading(false)
+        restoreOriginalSource()
+      }
+
       const getUpscaleTarget = (): { key: string; width: number; height: number } | null => {
         if (
           !enhancementEnabled
@@ -405,9 +413,7 @@ export default defineContentScript({
 
         const target = getUpscaleTarget()
         if (!target) {
-          upscaleRequestId += 1
-          setLoading(false)
-          restoreOriginalSource()
+          cancelUpscale()
           return
         }
 
@@ -454,8 +460,7 @@ export default defineContentScript({
       }
 
       const scheduleUpscale = (): void => {
-        if (overlayClosed) return
-        if (!enhancementEnabled) return
+        if (overlayClosed || !enhancementEnabled) return
         if (upscaleTimer) window.clearTimeout(upscaleTimer)
 
         upscaleTimer = window.setTimeout(() => {
@@ -571,21 +576,15 @@ export default defineContentScript({
 
       overlay.cleanupImageZoom = (): void => {
         overlayClosed = true
-        upscaleRequestId += 1
-        setLoading(false)
         if (animationFrame) cancelAnimationFrame(animationFrame)
-        if (upscaleTimer) window.clearTimeout(upscaleTimer)
+        cancelUpscale()
         upscaleCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
         upscaleCache.clear()
       }
 
       overlay.setImageEnhancementEnabled = (nextEnabled: boolean): void => {
         if (!nextEnabled) {
-          if (upscaleTimer) window.clearTimeout(upscaleTimer)
-          upscaleTimer = 0
-          upscaleRequestId += 1
-          setLoading(false)
-          restoreOriginalSource()
+          cancelUpscale()
           return
         }
 

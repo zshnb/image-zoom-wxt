@@ -10,11 +10,25 @@ import {
 
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
 type ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT'; enabled: boolean }
+type PopupMessage = ShortcutMessage | ImageEnhancementMessage
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type MessageName = Parameters<typeof browser.i18n.getMessage>[0]
 
 function t(name: MessageName, substitutions?: string | string[]): string {
   return browser.i18n.getMessage(name, substitutions) || name
+}
+
+function getStatusLabel(state: SaveState): string {
+  if (state === 'idle') return ''
+  if (state === 'saving') return t('popupShortcutSaving')
+  if (state === 'saved') return t('popupShortcutSaved')
+  return t('popupShortcutError')
+}
+
+function getStatusClass(state: SaveState): string {
+  if (state === 'error') return 'text-red-600 dark:text-red-300'
+  if (state === 'saved') return 'text-blue-700 dark:text-blue-300'
+  return 'text-zinc-500 dark:text-zinc-400'
 }
 
 function App() {
@@ -44,21 +58,9 @@ function App() {
     })
   }, [])
 
-  const notifyShortcutChanged = async (nextShortcut: TriggerShortcutCode): Promise<void> => {
+  const notifyActiveTab = async (message: PopupMessage): Promise<void> => {
     if (tabId === null) return
 
-    const message: ShortcutMessage = { type: 'UPDATE_SHORTCUT', shortcut: nextShortcut }
-    try {
-      await browser.tabs.sendMessage(tabId, message)
-    } catch {
-      // Some browser pages cannot receive content-script messages.
-    }
-  }
-
-  const notifyImageEnhancementChanged = async (enabled: boolean): Promise<void> => {
-    if (tabId === null) return
-
-    const message: ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT', enabled }
     try {
       await browser.tabs.sendMessage(tabId, message)
     } catch {
@@ -75,7 +77,7 @@ function App() {
 
     try {
       await triggerShortcut.setValue(value)
-      await notifyShortcutChanged(value)
+      await notifyActiveTab({ type: 'UPDATE_SHORTCUT', shortcut: value })
       setShortcutState('saved')
     } catch {
       setShortcutCode(previousShortcut)
@@ -90,7 +92,7 @@ function App() {
 
     try {
       await imageEnhancementEnabled.setValue(enabled)
-      await notifyImageEnhancementChanged(enabled)
+      await notifyActiveTab({ type: 'UPDATE_IMAGE_ENHANCEMENT', enabled })
       setImageEnhancementState('saved')
     } catch {
       setIsImageEnhancementEnabled(previousValue)
@@ -98,20 +100,8 @@ function App() {
     }
   }
 
-  const shortcutStatusLabel = shortcutState === 'idle'
-    ? ''
-    : shortcutState === 'saving'
-    ? t('popupShortcutSaving')
-    : shortcutState === 'saved'
-      ? t('popupShortcutSaved')
-      : t('popupShortcutError')
-  const imageEnhancementStatusLabel = imageEnhancementState === 'idle'
-    ? ''
-    : imageEnhancementState === 'saving'
-    ? t('popupShortcutSaving')
-    : imageEnhancementState === 'saved'
-      ? t('popupShortcutSaved')
-      : t('popupShortcutError')
+  const shortcutStatusLabel = getStatusLabel(shortcutState)
+  const imageEnhancementStatusLabel = getStatusLabel(imageEnhancementState)
 
   return (
     <main className="w-full bg-zinc-50 p-3 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
@@ -139,13 +129,7 @@ function App() {
           </label>
           {shortcutStatusLabel && (
             <span
-              className={`pb-2 text-xs font-medium ${
-                shortcutState === 'error'
-                  ? 'text-red-600 dark:text-red-300'
-                  : shortcutState === 'saved'
-                    ? 'text-blue-700 dark:text-blue-300'
-                    : 'text-zinc-500 dark:text-zinc-400'
-              }`}
+              className={`pb-2 text-xs font-medium ${getStatusClass(shortcutState)}`}
             >
               {shortcutStatusLabel}
             </span>
@@ -159,11 +143,7 @@ function App() {
           <div className="flex items-center gap-2">
             {imageEnhancementStatusLabel && (
               <span
-                className={`text-xs font-medium ${
-                  imageEnhancementState === 'error'
-                    ? 'text-red-600 dark:text-red-300'
-                    : 'text-zinc-500 dark:text-zinc-400'
-                }`}
+                className={`text-xs font-medium ${getStatusClass(imageEnhancementState)}`}
               >
                 {imageEnhancementStatusLabel}
               </span>
