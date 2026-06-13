@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "网页图片放大查看器",
+    "message": "点击图片放大器",
     "description": "扩展名称"
   },
   "extDescription": {
-    "message": "按住快捷键点击网页图片，在当前页面打开放大查看器，支持滚轮缩放、拖动查看和可选清晰放大。",
+    "message": "按住快捷键点击网页图片，在当前页放大查看；支持滚轮缩放、拖拽查看和本地清晰放大。",
     "description": "扩展短描述"
   },
   "popupActivationKey": {
@@ -27,9 +27,49 @@
     "message": "图片清晰算法",
     "description": "清晰算法开关标签"
   },
+  "popupCurrentSite": {
+    "message": "当前站点",
+    "description": "当前站点开关标签"
+  },
+  "popupSiteEnabled": {
+    "message": "已在当前站点启用",
+    "description": "当前站点启用状态"
+  },
+  "popupSiteDisabled": {
+    "message": "已在当前站点禁用",
+    "description": "当前站点禁用状态"
+  },
+  "popupSiteUnavailable": {
+    "message": "当前页面不可用",
+    "description": "当前站点不可用标签"
+  },
   "viewerImageProcessing": {
     "message": "正在提高清晰度",
     "description": "图片清晰算法处理中提示"
+  },
+  "viewerOpenImage": {
+    "message": "打开",
+    "description": "打开原图操作"
+  },
+  "viewerCopyImageLink": {
+    "message": "复制",
+    "description": "复制原图链接操作"
+  },
+  "viewerDownloadImage": {
+    "message": "下载",
+    "description": "下载图片操作"
+  },
+  "viewerClose": {
+    "message": "关闭",
+    "description": "关闭查看器操作"
+  },
+  "viewerLinkCopied": {
+    "message": "已复制链接",
+    "description": "图片链接复制成功状态"
+  },
+  "viewerLinkCopyFailed": {
+    "message": "复制失败",
+    "description": "图片链接复制失败状态"
   },
   "shortcutShiftLeft": {
     "message": "左 Shift",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   DEFAULT_TRIGGER_SHORTCUT,
+  disabledSites,
   imageEnhancementEnabled,
   isTriggerShortcutCode,
   triggerShortcut,
@@ -10,7 +11,10 @@ import {
 
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
 type ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT'; enabled: boolean }
-type PopupMessage = ShortcutMessage | ImageEnhancementMessage
+type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
+type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
+type PageStatusResponse = { hostname: string; enabled: boolean }
+type PopupMessage = ShortcutMessage | ImageEnhancementMessage | ToggleMessage
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type MessageName = Parameters<typeof browser.i18n.getMessage>[0]
 
@@ -31,12 +35,21 @@ function getStatusClass(state: SaveState): string {
   return 'text-zinc-500 dark:text-zinc-400'
 }
 
+function isPageStatusResponse(value: unknown): value is PageStatusResponse {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  return typeof candidate.hostname === 'string' && typeof candidate.enabled === 'boolean'
+}
+
 function App() {
   const [tabId, setTabId] = useState<number | null>(null)
   const [shortcutCode, setShortcutCode] = useState<TriggerShortcutCode>(DEFAULT_TRIGGER_SHORTCUT)
   const [shortcutState, setShortcutState] = useState<SaveState>('idle')
   const [isImageEnhancementEnabled, setIsImageEnhancementEnabled] = useState(true)
   const [imageEnhancementState, setImageEnhancementState] = useState<SaveState>('idle')
+  const [hostname, setHostname] = useState('')
+  const [isSiteEnabled, setIsSiteEnabled] = useState(true)
+  const [siteState, setSiteState] = useState<SaveState>('idle')
 
   useEffect(() => {
     const init = async (): Promise<void> => {
@@ -45,12 +58,26 @@ function App() {
         triggerShortcut.getValue(),
         imageEnhancementEnabled.getValue(),
       ])
+      const activeTabId = tab?.id ?? null
 
       setShortcutCode(
         isTriggerShortcutCode(storedShortcut) ? storedShortcut : DEFAULT_TRIGGER_SHORTCUT,
       )
       setIsImageEnhancementEnabled(storedImageEnhancementEnabled !== false)
-      setTabId(tab?.id ?? null)
+      setTabId(activeTabId)
+
+      if (activeTabId === null) return
+
+      try {
+        const pageStatusMessage: PageStatusMessage = { type: 'GET_PAGE_STATUS' }
+        const response = await browser.tabs.sendMessage(activeTabId, pageStatusMessage)
+        if (isPageStatusResponse(response)) {
+          setHostname(response.hostname)
+          setIsSiteEnabled(response.enabled)
+        }
+      } catch {
+        setHostname('')
+      }
     }
 
     void init().catch(() => {
@@ -100,8 +127,31 @@ function App() {
     }
   }
 
+  const onSiteEnabledChange = async (enabled: boolean): Promise<void> => {
+    if (!hostname) return
+
+    const previousValue = isSiteEnabled
+    setIsSiteEnabled(enabled)
+    setSiteState('saving')
+
+    try {
+      const sites = await disabledSites.getValue()
+      const nextSites = enabled
+        ? sites.filter((site) => site !== hostname)
+        : Array.from(new Set([...sites, hostname]))
+
+      await disabledSites.setValue(nextSites)
+      await notifyActiveTab({ type: 'TOGGLE_ZOOM', enabled })
+      setSiteState('saved')
+    } catch {
+      setIsSiteEnabled(previousValue)
+      setSiteState('error')
+    }
+  }
+
   const shortcutStatusLabel = getStatusLabel(shortcutState)
   const imageEnhancementStatusLabel = getStatusLabel(imageEnhancementState)
+  const siteStatusLabel = getStatusLabel(siteState)
 
   return (
     <main className="w-full bg-zinc-50 p-3 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-100">
@@ -166,6 +216,47 @@ function App() {
               <span
                 className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
                   isImageEnhancementEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-zinc-950 dark:text-zinc-100">
+              {t('popupCurrentSite')}
+            </p>
+            <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-500">
+              {hostname || t('popupSiteUnavailable')}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {siteStatusLabel && (
+              <span
+                className={`text-xs font-medium ${getStatusClass(siteState)}`}
+              >
+                {siteStatusLabel}
+              </span>
+            )}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isSiteEnabled}
+              aria-label={isSiteEnabled ? t('popupSiteEnabled') : t('popupSiteDisabled')}
+              disabled={!hostname || siteState === 'saving'}
+              onClick={() => {
+                void onSiteEnabledChange(!isSiteEnabled)
+              }}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-blue-500 dark:focus:ring-offset-zinc-900 ${
+                isSiteEnabled
+                  ? 'bg-blue-600 dark:bg-blue-500'
+                  : 'bg-zinc-300 dark:bg-zinc-700'
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                  isSiteEnabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>

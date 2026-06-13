@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "Image Zoom Viewer",
+    "message": "Click Image Zoom",
     "description": "Extension name"
   },
   "extDescription": {
-    "message": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and optional sharp upscaling.",
+    "message": "Hold a shortcut and click any web image to inspect it in place with wheel zoom, drag-to-pan, and local clarity mode.",
     "description": "Short extension description"
   },
   "popupActivationKey": {
@@ -27,9 +27,49 @@
     "message": "Image clarity algorithm",
     "description": "Image enhancement switch label"
   },
+  "popupCurrentSite": {
+    "message": "Current site",
+    "description": "Current site switch label"
+  },
+  "popupSiteEnabled": {
+    "message": "Enabled on this site",
+    "description": "Current site enabled state"
+  },
+  "popupSiteDisabled": {
+    "message": "Disabled on this site",
+    "description": "Current site disabled state"
+  },
+  "popupSiteUnavailable": {
+    "message": "Unavailable on this page",
+    "description": "Current site unavailable label"
+  },
   "viewerImageProcessing": {
     "message": "Sharpening image",
     "description": "Image enhancement processing label"
+  },
+  "viewerOpenImage": {
+    "message": "Open",
+    "description": "Open original image action"
+  },
+  "viewerCopyImageLink": {
+    "message": "Copy",
+    "description": "Copy original image URL action"
+  },
+  "viewerDownloadImage": {
+    "message": "Save",
+    "description": "Download image action"
+  },
+  "viewerClose": {
+    "message": "Close",
+    "description": "Close viewer action"
+  },
+  "viewerLinkCopied": {
+    "message": "Copied link",
+    "description": "Image URL copied state"
+  },
+  "viewerLinkCopyFailed": {
+    "message": "Copy failed",
+    "description": "Image URL copy failure state"
   },
   "shortcutShiftLeft": {
     "message": "Left Shift",

@@ -1,55 +1,63 @@
-# Image Zoom Viewer
+# Click Image Zoom
 
 Chrome Web Store listing copy for the extension.
 
 ## Name
 
-Image Zoom Viewer
+Click Image Zoom
 
 ## Short Description
 
-Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and optional sharp upscaling.
+Hold a shortcut and click any web image to inspect it in place with wheel zoom, drag-to-pan, and local clarity mode.
 
 ## Detailed Description
 
-Image Zoom Viewer helps you inspect web images without opening a new tab or downloading the file. Hold your chosen trigger key, click an image, and view it in a clean overlay built for fast visual inspection.
+Click Image Zoom helps you inspect web images without hover popups, new tabs, or uploads. Hold your chosen shortcut, click an image, and open a clean viewer right on the current page.
+
+It is built for quick visual checks when a product photo is too small, an article screenshot is hard to read, or a thumbnail needs a closer look.
 
 Main features:
 
-- Click-to-zoom image viewer for photos, product images, diagrams, thumbnails, and screenshots
+- Press-and-click activation, so images do not pop up just because your mouse passes over them
+- Clean in-page viewer for photos, product images, diagrams, screenshots, and thumbnails
 - Wheel zoom up to 10x with smooth scaling
-- Drag to pan around enlarged images
-- Optional sharp Lanczos upscaling for small images when they can be processed locally
-- Works on dynamic pages and image buttons
+- Drag to pan around enlarged images naturally
+- Open the original image, copy its link, or save it from the viewer
+- Optional local clarity mode for sharper enlargement when the image can be processed in your browser
 - Custom trigger key: Shift, Alt, Ctrl, or Command
-- Stays on the current page and closes with one click
+- Enable or disable the extension per site
+- Works on dynamic pages and image buttons
 
-Use it when ecommerce images are too small, article screenshots are hard to read, or social media thumbnails need a closer look.
+Click Image Zoom is intentionally simple: no automatic hover previews, no account required, and no remote image processing. Images stay in your browser and are not uploaded for clarity mode.
 
-No account required. Images stay in your browser and are not uploaded for processing.
+Use it when you want to inspect an image quickly without changing your browsing flow.
 
 ## 中文名称
 
-网页图片放大查看器
+点击图片放大器
 
 ## 中文简短描述
 
-按住快捷键点击网页图片，在当前页面打开放大查看器，支持滚轮缩放、拖动查看和可选清晰放大。
+按住快捷键点击网页图片，在当前页放大查看；支持滚轮缩放、拖拽查看和本地清晰放大。
 
 ## 中文详细描述
 
-网页图片放大查看器可以帮你在不离开当前页面的情况下查看图片细节。按住设置好的触发按键，点击网页图片，即可在干净的遮罩层中放大查看。
+点击图片放大器可以帮你在不离开当前页面的情况下查看网页图片细节。按住设置好的快捷键，点击图片，即可在当前页面打开一个干净的放大查看器。
+
+它适合快速检查商品图、文章截图、图表、头像和缩略图：图片太小、细节看不清时，不需要新开标签页，也不需要下载文件。
 
 主要功能：
 
-- 点击放大网页图片，适合查看商品图、文章配图、截图、缩略图和图表
+- 按住快捷键再点击图片才触发，避免鼠标经过图片时自动弹窗
+- 在当前页面放大查看商品图、文章配图、截图、缩略图和图表
 - 支持滚轮缩放，最高可放大到 10 倍
 - 放大后可拖动图片查看局部细节
-- 可选择开启 Lanczos 算法，在图片允许本地处理时进行更清晰的放大
-- 支持动态加载的网页图片和按钮内图片
+- 可直接打开原图、复制图片链接或下载图片
+- 可选择开启本地清晰模式，在图片允许处理时进行更清晰的放大
 - 可自定义触发按键：Shift、Alt、Ctrl 或 Command
-- 不打开新标签页，不打断当前浏览流程
+- 可按站点启用或禁用
+- 支持动态加载的网页图片和按钮内图片
+
+点击图片放大器刻意保持轻量：不自动悬停预览，不需要账号，也不把图片上传到远程服务处理。清晰模式在浏览器本地运行，图片保留在你的浏览器中。
 
 适合在商品图片太小、文章截图看不清、社交媒体缩略图需要放大时使用。
-
-无需注册账号。图片保留在浏览器本地，不会上传处理。

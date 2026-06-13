@@ -2,7 +2,7 @@
   "name": "image-zoom-wxt",
   "description": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and sharp upscaling.",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "scripts": {
     "dev": "wxt",

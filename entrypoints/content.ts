@@ -10,7 +10,10 @@ import {
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
 type ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT'; enabled: boolean }
+type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
+type DownloadImageResponse = { ok: boolean }
 type ResizeWeight = { indices: number[]; weights: number[] }
+type ImageCandidate = { url: string; score: number }
 type ZoomOverlayElement = HTMLDivElement & {
   cleanupImageZoom?: () => void
   setImageEnhancementEnabled?: (enabled: boolean) => void
@@ -21,6 +24,18 @@ const MAX_LANCZOS_SCALE = 4
 const MAX_LANCZOS_PIXELS = 6_000_000
 const UPSCALE_IDLE_DELAY_MS = 120
 const RESIZE_YIELD_MS = 12
+const MIN_BACKGROUND_IMAGE_SIZE = 24
+const IMAGE_DATA_ATTRIBUTES = [
+  'data-full-src',
+  'data-original-src',
+  'data-high-res-src',
+  'data-hires',
+  'data-zoom-src',
+  'data-large',
+  'data-original',
+  'data-lazy-src',
+  'data-src',
+] as const
 
 function isToggleMessage(msg: unknown): msg is ToggleMessage {
   if (typeof msg !== 'object' || msg === null) return false
@@ -38,6 +53,18 @@ function isImageEnhancementMessage(msg: unknown): msg is ImageEnhancementMessage
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
   return candidate.type === 'UPDATE_IMAGE_ENHANCEMENT' && typeof candidate.enabled === 'boolean'
+}
+
+function isPageStatusMessage(msg: unknown): msg is PageStatusMessage {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return candidate.type === 'GET_PAGE_STATUS'
+}
+
+function isDownloadImageResponse(msg: unknown): msg is DownloadImageResponse {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return typeof candidate.ok === 'boolean'
 }
 
 function waitForNextFrame(): Promise<void> {
@@ -91,6 +118,164 @@ function createLanczosWeights(sourceSize: number, targetSize: number): ResizeWei
   }
 
   return weights
+}
+
+function getMessage(name: Parameters<typeof browser.i18n.getMessage>[0], fallback: string): string {
+  return browser.i18n.getMessage(name) || fallback
+}
+
+function resolveImageUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  if (!trimmed || trimmed === 'none') return null
+
+  try {
+    const url = new URL(trimmed, location.href)
+    if (!['http:', 'https:', 'data:', 'blob:'].includes(url.protocol)) return null
+    return url.href
+  } catch {
+    return null
+  }
+}
+
+function addImageCandidate(
+  candidates: ImageCandidate[],
+  value: string | null | undefined,
+  score: number,
+): void {
+  const url = resolveImageUrl(value)
+  if (url) candidates.push({ url, score })
+}
+
+function getSrcsetDescriptorScore(descriptor: string | undefined, baseWidth: number): number {
+  if (!descriptor) return 1
+
+  const value = Number.parseFloat(descriptor)
+  if (!Number.isFinite(value) || value <= 0) return 1
+
+  if (descriptor.endsWith('w')) return value
+  if (descriptor.endsWith('x')) return value * Math.max(baseWidth, 1)
+  return value
+}
+
+function addSrcsetCandidates(
+  candidates: ImageCandidate[],
+  srcset: string | null | undefined,
+  baseWidth: number,
+): void {
+  if (!srcset) return
+
+  srcset.split(',').forEach((rawCandidate) => {
+    const parts = rawCandidate.trim().split(/\s+/)
+    if (parts.length < 1) return
+
+    addImageCandidate(
+      candidates,
+      parts[0],
+      getSrcsetDescriptorScore(parts[1], baseWidth),
+    )
+  })
+}
+
+function pickBestImageCandidate(candidates: ImageCandidate[]): string | null {
+  let best: ImageCandidate | null = null
+
+  for (const candidate of candidates) {
+    if (!best || candidate.score > best.score) {
+      best = candidate
+    }
+  }
+
+  return best?.url ?? null
+}
+
+function getBestImageElementUrl(image: HTMLImageElement): string | null {
+  const candidates: ImageCandidate[] = []
+  const baseWidth = image.naturalWidth || image.width || 1
+  const picture = image.parentElement instanceof HTMLPictureElement ? image.parentElement : null
+
+  picture?.querySelectorAll<HTMLSourceElement>('source').forEach((source) => {
+    if (source.media && !window.matchMedia(source.media).matches) return
+    addSrcsetCandidates(candidates, source.srcset || source.getAttribute('srcset'), baseWidth)
+  })
+
+  addSrcsetCandidates(candidates, image.getAttribute('srcset'), baseWidth)
+  addSrcsetCandidates(candidates, image.getAttribute('data-srcset'), baseWidth)
+  addImageCandidate(candidates, image.currentSrc, baseWidth)
+
+  IMAGE_DATA_ATTRIBUTES.forEach((attribute, index) => {
+    addImageCandidate(
+      candidates,
+      image.getAttribute(attribute),
+      baseWidth + 100 + IMAGE_DATA_ATTRIBUTES.length - index,
+    )
+  })
+
+  addImageCandidate(candidates, image.getAttribute('src'), 1)
+  addImageCandidate(candidates, image.src, 1)
+
+  return pickBestImageCandidate(candidates)
+}
+
+function getBackgroundImageUrl(el: HTMLElement): string | null {
+  const backgroundImage = getComputedStyle(el).backgroundImage
+  const match = backgroundImage.match(/url\((?:"([^"]+)"|'([^']+)'|([^)]*))\)/)
+  return resolveImageUrl(match?.[1] ?? match?.[2] ?? match?.[3])
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fall through to the selection-based copy path.
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+
+  let copied = false
+  try {
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  }
+
+  textarea.remove()
+  return copied
+}
+
+function getDownloadFilename(src: string): string {
+  if (src.startsWith('data:image/')) {
+    const type = src.slice('data:image/'.length).split(/[;,]/)[0]
+    return type ? `image.${type === 'jpeg' ? 'jpg' : type}` : 'image'
+  }
+
+  try {
+    const url = new URL(src, location.href)
+    const filename = url.pathname.split('/').filter(Boolean).pop()
+    return filename ? decodeURIComponent(filename) : 'image'
+  } catch {
+    return 'image'
+  }
+}
+
+function triggerAnchorDownload(src: string): void {
+  const link = document.createElement('a')
+  link.href = src
+  link.download = getDownloadFilename(src)
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }
 
 async function resizeLanczos3(
@@ -249,6 +434,51 @@ export default defineContentScript({
         will-change: transform;
         touch-action: none;
       }
+      #${OVERLAY_ID} .image-zoom-toolbar {
+        position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
+        display: flex; align-items: center; gap: 6px;
+        z-index: 2;
+        padding: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        background: rgba(24, 24, 27, 0.72);
+        backdrop-filter: blur(10px);
+      }
+      #${OVERLAY_ID} .image-zoom-toolbar button {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 8px;
+        background: rgba(39, 39, 42, 0.88);
+        color: #fff;
+        cursor: pointer;
+      }
+      #${OVERLAY_ID} .image-zoom-toolbar button:hover {
+        background: rgba(63, 63, 70, 0.96);
+      }
+      #${OVERLAY_ID} .image-zoom-toolbar svg {
+        width: 18px; height: 18px;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+      #${OVERLAY_ID} .image-zoom-toolbar button:focus-visible {
+        outline: 2px solid rgba(96, 165, 250, 0.95);
+        outline-offset: 2px;
+      }
+      #${OVERLAY_ID} .image-zoom-status {
+        position: absolute; top: 24px; left: 24px;
+        z-index: 2;
+        padding: 8px 10px; border-radius: 8px;
+        background: rgba(24, 24, 27, 0.86);
+        color: #fff;
+        font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        pointer-events: none;
+      }
+      #${OVERLAY_ID} .image-zoom-status[hidden] { display: none; }
       #${OVERLAY_ID} .image-zoom-loading {
         position: absolute; top: 24px; left: 50%;
         transform: translateX(-50%);
@@ -298,6 +528,16 @@ export default defineContentScript({
       img.alt = alt
       img.draggable = false
 
+      const toolbar = document.createElement('div')
+      toolbar.className = 'image-zoom-toolbar'
+      toolbar.setAttribute('role', 'toolbar')
+
+      const status = document.createElement('div')
+      status.className = 'image-zoom-status'
+      status.hidden = true
+      status.setAttribute('role', 'status')
+      status.setAttribute('aria-live', 'polite')
+
       const loading = document.createElement('div')
       loading.className = 'image-zoom-loading'
       loading.hidden = true
@@ -331,8 +571,108 @@ export default defineContentScript({
       let sourceReady = false
       let sourceFailed = false
       let overlayClosed = false
+      let statusTimer = 0
       const upscaleCache = new Map<string, string>()
       const sourceImage = new Image()
+
+      const showStatus = (message: string): void => {
+        if (statusTimer) window.clearTimeout(statusTimer)
+        status.textContent = message
+        status.hidden = false
+        statusTimer = window.setTimeout(() => {
+          status.hidden = true
+          statusTimer = 0
+        }, 1800)
+      }
+
+      const createToolbarButton = (
+        labelName: Parameters<typeof browser.i18n.getMessage>[0],
+        fallbackLabel: string,
+        iconPath: string,
+        onClick: () => void,
+      ): HTMLButtonElement => {
+        const button = document.createElement('button')
+        const label = getMessage(labelName, fallbackLabel)
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+
+        icon.setAttribute('viewBox', '0 0 24 24')
+        icon.setAttribute('aria-hidden', 'true')
+        icon.setAttribute('focusable', 'false')
+        path.setAttribute('d', iconPath)
+        icon.appendChild(path)
+
+        button.type = 'button'
+        button.title = label
+        button.setAttribute('aria-label', label)
+        button.appendChild(icon)
+        button.addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onClick()
+        })
+        return button
+      }
+
+      const openOriginal = (): void => {
+        window.open(src, '_blank', 'noopener,noreferrer')
+      }
+
+      const downloadOriginal = (): void => {
+        if (src.startsWith('data:') || src.startsWith('blob:')) {
+          triggerAnchorDownload(src)
+          return
+        }
+
+        void browser.runtime.sendMessage({
+          type: 'DOWNLOAD_IMAGE',
+          url: src,
+          filename: getDownloadFilename(src),
+        }).then((response: unknown) => {
+          if (!isDownloadImageResponse(response) || !response.ok) {
+            triggerAnchorDownload(src)
+          }
+        }).catch(() => {
+          triggerAnchorDownload(src)
+        })
+      }
+
+      const copyOriginalLink = (): void => {
+        void copyTextToClipboard(src).then((copied) => {
+          showStatus(
+            copied
+              ? getMessage('viewerLinkCopied', 'Copied link')
+              : getMessage('viewerLinkCopyFailed', 'Copy failed'),
+          )
+        })
+      }
+
+      toolbar.append(
+        createToolbarButton(
+          'viewerOpenImage',
+          'Open',
+          'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
+          openOriginal,
+        ),
+        createToolbarButton(
+          'viewerCopyImageLink',
+          'Copy',
+          'M8 8h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h1',
+          copyOriginalLink,
+        ),
+        createToolbarButton(
+          'viewerDownloadImage',
+          'Save',
+          'M12 3v12M7 10l5 5 5-5M5 21h14',
+          downloadOriginal,
+        ),
+        createToolbarButton(
+          'viewerClose',
+          'Close',
+          'M6 6l12 12M18 6 6 18',
+          closeOverlay,
+        ),
+      )
 
       const renderTransform = (): void => {
         img.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${currentScale})`
@@ -576,6 +916,7 @@ export default defineContentScript({
 
       overlay.cleanupImageZoom = (): void => {
         overlayClosed = true
+        if (statusTimer) window.clearTimeout(statusTimer)
         if (animationFrame) cancelAnimationFrame(animationFrame)
         cancelUpscale()
         upscaleCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
@@ -591,8 +932,10 @@ export default defineContentScript({
         scheduleUpscale()
       }
 
+      overlay.appendChild(toolbar)
       overlay.appendChild(img)
       overlay.appendChild(loading)
+      overlay.appendChild(status)
       document.body.appendChild(overlay)
     }
 
@@ -610,21 +953,35 @@ export default defineContentScript({
 
     // --- Image click handler ---
     function getImageSrc(el: HTMLElement): string | null {
-      if (el instanceof HTMLImageElement) return el.src
-      const bg = getComputedStyle(el).backgroundImage
-      const match = bg.match(/url\(["']?(.+?)["']?\)/)
-      return match ? match[1] : null
+      if (el instanceof HTMLImageElement) return getBestImageElementUrl(el)
+      return getBackgroundImageUrl(el)
     }
 
     function getImageAlt(el: HTMLElement): string {
       if (el instanceof HTMLImageElement) return el.alt
-      return ''
+      return el.getAttribute('aria-label') || el.getAttribute('title') || ''
     }
 
-    function getClickImageTarget(target: HTMLElement): HTMLImageElement | null {
+    function getBackgroundImageTarget(target: HTMLElement): HTMLElement | null {
+      let current: HTMLElement | null = target
+
+      while (current && current !== document.body) {
+        if (current.closest(`#${OVERLAY_ID}`)) return null
+        if (current instanceof HTMLImageElement) return null
+        if (isVisibleImage(current) && getBackgroundImageUrl(current)) return current
+        current = current.parentElement
+      }
+
+      return null
+    }
+
+    function getClickImageTarget(target: HTMLElement): HTMLElement | null {
       if (target instanceof HTMLImageElement && target.classList.contains(HOVERABLE_CLASS)) {
         return target
       }
+
+      const backgroundTarget = getBackgroundImageTarget(target)
+      if (backgroundTarget) return backgroundTarget
 
       const container = target.closest<HTMLElement>(IMAGE_TRIGGER_CONTAINER_SELECTOR)
       if (!container) return null
@@ -637,21 +994,23 @@ export default defineContentScript({
       if (!enabled) return
       const overlay = document.getElementById(OVERLAY_ID)
       if (overlay) {
-        const target = e.target as HTMLElement
+        const target = e.target
+        if (!(target instanceof HTMLElement)) return
         if (overlay instanceof HTMLElement && overlay.dataset.dragMoved === 'true') {
           overlay.dataset.dragMoved = 'false'
           e.preventDefault()
           e.stopPropagation()
           return
         }
-        if (target.tagName === 'IMG') return
+        if (target.closest('.image-zoom-toolbar') || target.tagName === 'IMG') return
         e.preventDefault()
         e.stopPropagation()
         closeOverlay()
         return
       }
       if (!shortcutPressed) return
-      const target = e.target as HTMLElement
+      const target = e.target
+      if (!(target instanceof HTMLElement)) return
       const imageTarget = getClickImageTarget(target)
       if (!imageTarget) return
       e.preventDefault()
@@ -665,16 +1024,20 @@ export default defineContentScript({
       if (el instanceof HTMLImageElement) {
         return el.naturalWidth > 1 && el.naturalHeight > 1 && el.width > 1
       }
-      const bg = getComputedStyle(el).backgroundImage
-      return bg !== 'none' && bg !== ''
+
+      const rect = el.getBoundingClientRect()
+      return (
+        rect.width >= MIN_BACKGROUND_IMAGE_SIZE
+        && rect.height >= MIN_BACKGROUND_IMAGE_SIZE
+        && getBackgroundImageUrl(el) !== null
+      )
     }
 
     function addHoverable(el: HTMLElement): void {
-      if (!(el instanceof HTMLImageElement)) return
       if (el.closest(`#${OVERLAY_ID}`)) return
       if (isVisibleImage(el)) {
         el.classList.add(HOVERABLE_CLASS)
-      } else if (!el.complete) {
+      } else if (el instanceof HTMLImageElement && !el.complete) {
         el.addEventListener('load', () => {
           if (enabled && isVisibleImage(el)) el.classList.add(HOVERABLE_CLASS)
         }, { once: true })
@@ -686,7 +1049,7 @@ export default defineContentScript({
     }
 
     function scanImages(): void {
-      document.querySelectorAll<HTMLElement>('img').forEach((el) => {
+      document.querySelectorAll<HTMLElement>('img, [style*="background"]').forEach((el) => {
         if (enabled) addHoverable(el)
         else removeHoverable(el)
       })
@@ -698,10 +1061,10 @@ export default defineContentScript({
       for (const mutation of mutations) {
         mutation.addedNodes.forEach((node) => {
           if (node instanceof HTMLElement) {
-            if (node.matches('img')) {
+            if (node.matches('img, [style*="background"]')) {
               addHoverable(node)
             }
-            node.querySelectorAll<HTMLElement>('img').forEach(addHoverable)
+            node.querySelectorAll<HTMLElement>('img, [style*="background"]').forEach(addHoverable)
           }
         })
       }
@@ -721,6 +1084,13 @@ export default defineContentScript({
     }
 
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById(OVERLAY_ID)) {
+        e.preventDefault()
+        e.stopPropagation()
+        closeOverlay()
+        return
+      }
+
       if (e.code !== activeShortcut) return
       shortcutPressed = true
       setTriggerActive(true)
@@ -748,8 +1118,16 @@ export default defineContentScript({
       applyImageEnhancementEnabled(nextEnabled !== false)
     })
 
+    disabledSites.watch((nextSites) => {
+      applyEnabled(!nextSites.includes(hostname))
+    })
+
     // Listen for toggle messages sent directly from popup via tabs.sendMessage
     browser.runtime.onMessage.addListener((msg: unknown) => {
+      if (isPageStatusMessage(msg)) {
+        return Promise.resolve({ hostname, enabled })
+      }
+
       if (isToggleMessage(msg)) {
         applyEnabled(msg.enabled)
       }
