@@ -1,22 +1,52 @@
 import {
   DEFAULT_TRIGGER_SHORTCUT,
+  aiEnhancementStrength,
   disabledSites,
   imageEnhancementEnabled,
+  imageEnhancementMode,
+  isImageEnhancementMode,
   isTriggerShortcutCode,
+  resolveImageEnhancementMode,
+  resolveAiEnhancementStrength,
   triggerShortcut,
+  type ImageEnhancementMode,
   type TriggerShortcutCode,
 } from '@/utils/storage'
+import {
+  createRealEsrganObjectUrl,
+  disposeRealEsrgan,
+  isEnhancementAbort,
+  logImageEnhancement,
+  type EnhancementLogContext,
+} from '@/utils/realEsrgan'
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
-type ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT'; enabled: boolean }
+type ImageEnhancementMessage = {
+  type: 'UPDATE_IMAGE_ENHANCEMENT_MODE'
+  mode: ImageEnhancementMode
+}
+type AiEnhancementStrengthMessage = {
+  type: 'UPDATE_AI_ENHANCEMENT_STRENGTH'
+  strength: number
+}
 type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
 type DownloadImageResponse = { ok: boolean }
+type FetchImageResponse =
+  | {
+      ok: true
+      dataUrl: string
+      bytes: number
+      mimeType: string
+      finalUrl: string
+    }
+  | { ok: false; error: string }
 type ResizeWeight = { indices: number[]; weights: number[] }
 type ImageCandidate = { url: string; score: number }
 type ZoomOverlayElement = HTMLDivElement & {
   cleanupImageZoom?: () => void
-  setImageEnhancementEnabled?: (enabled: boolean) => void
+  setImageEnhancementMode?: (mode: ImageEnhancementMode) => void
+  setAiEnhancementStrength?: (strength: number) => void
 }
 
 const LANCZOS_RADIUS = 3
@@ -52,7 +82,22 @@ function isShortcutMessage(msg: unknown): msg is ShortcutMessage {
 function isImageEnhancementMessage(msg: unknown): msg is ImageEnhancementMessage {
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
-  return candidate.type === 'UPDATE_IMAGE_ENHANCEMENT' && typeof candidate.enabled === 'boolean'
+  return (
+    candidate.type === 'UPDATE_IMAGE_ENHANCEMENT_MODE'
+    && isImageEnhancementMode(candidate.mode)
+  )
+}
+
+function isAiEnhancementStrengthMessage(
+  msg: unknown,
+): msg is AiEnhancementStrengthMessage {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return (
+    candidate.type === 'UPDATE_AI_ENHANCEMENT_STRENGTH'
+    && typeof candidate.strength === 'number'
+    && Number.isFinite(candidate.strength)
+  )
 }
 
 function isPageStatusMessage(msg: unknown): msg is PageStatusMessage {
@@ -65,6 +110,66 @@ function isDownloadImageResponse(msg: unknown): msg is DownloadImageResponse {
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
   return typeof candidate.ok === 'boolean'
+}
+
+function isFetchImageResponse(msg: unknown): msg is FetchImageResponse {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  if (candidate.ok === false) return typeof candidate.error === 'string'
+  return (
+    candidate.ok === true
+    && typeof candidate.dataUrl === 'string'
+    && typeof candidate.bytes === 'number'
+    && typeof candidate.mimeType === 'string'
+    && typeof candidate.finalUrl === 'string'
+  )
+}
+
+function canReadImagePixels(image: HTMLImageElement): boolean {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return false
+
+  try {
+    context.drawImage(image, 0, 0, 1, 1)
+    context.getImageData(0, 0, 1, 1)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function loadDataImage(dataUrl: string, signal?: AbortSignal): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+
+    const cleanup = (): void => {
+      image.removeEventListener('load', onLoad)
+      image.removeEventListener('error', onError)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const onLoad = (): void => {
+      cleanup()
+      resolve(image)
+    }
+    const onError = (): void => {
+      cleanup()
+      reject(new Error('Fetched image data could not be decoded'))
+    }
+    const onAbort = (): void => {
+      cleanup()
+      image.src = ''
+      reject(new DOMException('Image enhancement canceled', 'AbortError'))
+    }
+
+    image.addEventListener('load', onLoad, { once: true })
+    image.addEventListener('error', onError, { once: true })
+    signal?.addEventListener('abort', onAbort, { once: true })
+    image.src = dataUrl
+  })
 }
 
 function waitForNextFrame(): Promise<void> {
@@ -400,16 +505,30 @@ export default defineContentScript({
 
   async main() {
     const hostname = location.hostname
-    const [sites, storedShortcut, storedImageEnhancementEnabled] = await Promise.all([
+    const [
+      sites,
+      storedShortcut,
+      storedImageEnhancementMode,
+      storedImageEnhancementEnabled,
+      storedAiEnhancementStrength,
+    ] = await Promise.all([
       disabledSites.getValue(),
       triggerShortcut.getValue(),
+      imageEnhancementMode.getValue(),
       imageEnhancementEnabled.getValue(),
+      aiEnhancementStrength.getValue(),
     ])
     let enabled = !sites.includes(hostname)
     let activeShortcut = isTriggerShortcutCode(storedShortcut)
       ? storedShortcut
       : DEFAULT_TRIGGER_SHORTCUT
-    let enhancementEnabled = storedImageEnhancementEnabled
+    let activeEnhancementMode = resolveImageEnhancementMode(
+      storedImageEnhancementMode,
+      storedImageEnhancementEnabled,
+    )
+    let activeAiEnhancementStrength = resolveAiEnhancementStrength(
+      storedAiEnhancementStrength,
+    )
     let shortcutPressed = false
 
     const HOVERABLE_CLASS = 'image-zoom-hoverable'
@@ -521,8 +640,15 @@ export default defineContentScript({
     function openOverlay(src: string, alt: string): void {
       if (document.getElementById(OVERLAY_ID)) return
 
+      const sessionId = crypto.randomUUID()
+      const enhancementContext: EnhancementLogContext = { sessionId }
       const overlay = document.createElement('div') as ZoomOverlayElement
       overlay.id = OVERLAY_ID
+      logImageEnhancement('info', 'overlay_open', enhancementContext, {
+        hostname,
+        mode: activeEnhancementMode,
+        aiStrength: activeAiEnhancementStrength,
+      })
 
       const img = document.createElement('img')
       img.alt = alt
@@ -567,13 +693,15 @@ export default defineContentScript({
       let baseHeight = 0
       let upscaleTimer = 0
       let upscaleRequestId = 0
+      let upscaleAbortController: AbortController | null = null
       let renderedUpscaleKey = ''
       let sourceReady = false
       let sourceFailed = false
       let overlayClosed = false
       let statusTimer = 0
       const upscaleCache = new Map<string, string>()
-      const sourceImage = new Image()
+      let sourceImage = new Image()
+      let sourceRecoveryPromise: Promise<HTMLImageElement | null> | null = null
 
       const showStatus = (message: string): void => {
         if (statusTimer) window.clearTimeout(statusTimer)
@@ -583,6 +711,78 @@ export default defineContentScript({
           status.hidden = true
           statusTimer = 0
         }, 1800)
+      }
+
+      const recoverSourceImage = (
+        context: EnhancementLogContext,
+        signal?: AbortSignal,
+      ): Promise<HTMLImageElement | null> => {
+        if (sourceReady && !sourceFailed && canReadImagePixels(sourceImage)) {
+          return Promise.resolve(sourceImage)
+        }
+        if (sourceRecoveryPromise) return sourceRecoveryPromise
+
+        const startedAt = performance.now()
+        logImageEnhancement('warn', 'source_pixels_unavailable', context, {
+          sourceUrlOrigin: (() => {
+            try {
+              return new URL(src, location.href).origin
+            } catch {
+              return 'invalid'
+            }
+          })(),
+          recovery: 'background_fetch',
+        })
+        logImageEnhancement('info', 'source_fetch_request', context)
+
+        sourceRecoveryPromise = browser.runtime.sendMessage({
+          type: 'FETCH_IMAGE_FOR_ENHANCEMENT',
+          url: src,
+        }).then(async (response: unknown) => {
+          if (!isFetchImageResponse(response)) {
+            logImageEnhancement('warn', 'source_fetch_recovery_failed', context, {
+              reason: 'invalid_response',
+              durationMs: Math.round(performance.now() - startedAt),
+            })
+            return null
+          }
+          if (!response.ok) {
+            logImageEnhancement('warn', 'source_fetch_recovery_failed', context, {
+              reason: response.error,
+              durationMs: Math.round(performance.now() - startedAt),
+            })
+            return null
+          }
+
+          if (signal?.aborted || overlayClosed) {
+            throw new DOMException('Image enhancement canceled', 'AbortError')
+          }
+
+          const recoveredImage = await loadDataImage(response.dataUrl, signal)
+          if (overlayClosed) return null
+
+          sourceImage = recoveredImage
+          sourceReady = true
+          sourceFailed = false
+          logImageEnhancement('info', 'source_fetch_recovery_complete', context, {
+            bytes: response.bytes,
+            mimeType: response.mimeType,
+            finalHostname: new URL(response.finalUrl).hostname,
+            durationMs: Math.round(performance.now() - startedAt),
+          })
+          return recoveredImage
+        }).catch((error: unknown) => {
+          if (!isEnhancementAbort(error)) {
+            logImageEnhancement('warn', 'source_fetch_recovery_failed', context, {
+              errorMessage: error instanceof Error ? error.message : String(error),
+              durationMs: Math.round(performance.now() - startedAt),
+            })
+          }
+          sourceRecoveryPromise = null
+          throw error
+        })
+
+        return sourceRecoveryPromise
       }
 
       const createToolbarButton = (
@@ -691,6 +891,14 @@ export default defineContentScript({
       const cancelUpscale = (): void => {
         if (upscaleTimer) window.clearTimeout(upscaleTimer)
         upscaleTimer = 0
+        if (upscaleAbortController) {
+          upscaleAbortController.abort()
+          upscaleAbortController = null
+          logImageEnhancement('debug', 'request_canceled', enhancementContext, {
+            requestId: upscaleRequestId,
+            reason: 'viewer_state_changed',
+          })
+        }
         upscaleRequestId += 1
         setLoading(false)
         restoreOriginalSource()
@@ -698,7 +906,7 @@ export default defineContentScript({
 
       const getUpscaleTarget = (): { key: string; width: number; height: number } | null => {
         if (
-          !enhancementEnabled
+          activeEnhancementMode === 'off'
           || baseWidth < 1
           || baseHeight < 1
           || !sourceReady
@@ -735,7 +943,9 @@ export default defineContentScript({
         if (width <= sourceWidth || height <= sourceHeight) return null
 
         return {
-          key: `${width}x${height}`,
+          key: `${activeEnhancementMode}:${
+            activeEnhancementMode === 'ai' ? activeAiEnhancementStrength : 'na'
+          }:${width}x${height}`,
           width,
           height,
         }
@@ -764,21 +974,102 @@ export default defineContentScript({
 
         const requestId = upscaleRequestId + 1
         upscaleRequestId = requestId
+        const requestMode = activeEnhancementMode
+        const requestAiStrength = activeAiEnhancementStrength
+        const requestContext = { ...enhancementContext, requestId }
         const cached = upscaleCache.get(target.key)
         if (cached) {
+          logImageEnhancement('info', 'upscale_cache_hit', requestContext, {
+            mode: requestMode,
+            targetWidth: target.width,
+            targetHeight: target.height,
+          })
           setLoading(false)
           showUpscaledSource(cached, target.key)
           return
         }
 
+        upscaleAbortController?.abort()
+        const abortController = new AbortController()
+        upscaleAbortController = abortController
         let objectUrl: string | null = null
         try {
           setLoading(true)
           await waitForNextFrame()
-          objectUrl = await createLanczosObjectUrl(sourceImage, target.width, target.height)
-        } catch {
+          logImageEnhancement('info', 'upscale_request_start', requestContext, {
+            mode: requestMode,
+            aiStrength: requestMode === 'ai' ? requestAiStrength : undefined,
+            sourceWidth: sourceImage.naturalWidth,
+            sourceHeight: sourceImage.naturalHeight,
+            targetWidth: target.width,
+            targetHeight: target.height,
+          })
+          const enhancementSource = canReadImagePixels(sourceImage)
+            ? sourceImage
+            : await recoverSourceImage(requestContext, abortController.signal)
+          if (!enhancementSource) {
+            throw new Error('Source image pixels are unavailable')
+          }
+
+          if (requestMode === 'ai') {
+            if (requestAiStrength === 0) {
+              logImageEnhancement('info', 'ai_upscale_bypassed', requestContext, {
+                strength: requestAiStrength,
+                to: 'lanczos3',
+              })
+            } else {
+              try {
+                objectUrl = await createRealEsrganObjectUrl(
+                  enhancementSource,
+                  target.width,
+                  target.height,
+                  requestAiStrength,
+                  requestContext,
+                  abortController.signal,
+                )
+              } catch (error) {
+                if (isEnhancementAbort(error)) throw error
+                logImageEnhancement('warn', 'algorithm_fallback', requestContext, {
+                  from: 'real-esrgan',
+                  to: 'lanczos3',
+                  errorMessage: error instanceof Error ? error.message : String(error),
+                })
+              }
+            }
+          }
+
+          if (!objectUrl) {
+            const startedAt = performance.now()
+            logImageEnhancement('info', 'lanczos_upscale_start', requestContext, {
+              targetWidth: target.width,
+              targetHeight: target.height,
+            })
+            objectUrl = await createLanczosObjectUrl(
+              enhancementSource,
+              target.width,
+              target.height,
+            )
+            logImageEnhancement('info', 'lanczos_upscale_complete', requestContext, {
+              durationMs: Math.round(performance.now() - startedAt),
+              success: objectUrl !== null,
+            })
+          }
+        } catch (error) {
+          if (isEnhancementAbort(error)) {
+            logImageEnhancement('debug', 'upscale_request_aborted', requestContext, {
+              mode: requestMode,
+            })
+          } else {
+            logImageEnhancement('error', 'upscale_request_failed', requestContext, {
+              mode: requestMode,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            })
+          }
           objectUrl = null
         } finally {
+          if (upscaleAbortController === abortController) {
+            upscaleAbortController = null
+          }
           if (!overlayClosed && requestId === upscaleRequestId) {
             setLoading(false)
           }
@@ -797,11 +1088,21 @@ export default defineContentScript({
 
         upscaleCache.set(target.key, objectUrl)
         showUpscaledSource(objectUrl, target.key)
+        logImageEnhancement('info', 'upscale_request_applied', requestContext, {
+          mode: requestMode,
+          cacheKey: target.key,
+        })
       }
 
       const scheduleUpscale = (): void => {
-        if (overlayClosed || !enhancementEnabled) return
+        if (overlayClosed || activeEnhancementMode === 'off') return
         if (upscaleTimer) window.clearTimeout(upscaleTimer)
+
+        logImageEnhancement('debug', 'upscale_scheduled', enhancementContext, {
+          mode: activeEnhancementMode,
+          delayMs: UPSCALE_IDLE_DELAY_MS,
+          targetScale,
+        })
 
         upscaleTimer = window.setTimeout(() => {
           upscaleTimer = 0
@@ -853,6 +1154,20 @@ export default defineContentScript({
       }, { once: true })
       sourceImage.addEventListener('error', () => {
         sourceFailed = true
+        sourceReady = false
+        logImageEnhancement('warn', 'source_direct_load_failed', enhancementContext, {
+          recovery: 'background_fetch',
+        })
+        void recoverSourceImage(enhancementContext).then((recoveredImage) => {
+          if (!recoveredImage || overlayClosed) return
+          scheduleUpscale()
+        }).catch((error: unknown) => {
+          if (!isEnhancementAbort(error)) {
+            logImageEnhancement('warn', 'source_recovery_unavailable', enhancementContext, {
+              errorMessage: error instanceof Error ? error.message : String(error),
+            })
+          }
+        })
       }, { once: true })
       sourceImage.src = src
 
@@ -916,19 +1231,34 @@ export default defineContentScript({
 
       overlay.cleanupImageZoom = (): void => {
         overlayClosed = true
+        logImageEnhancement('info', 'overlay_cleanup_start', enhancementContext, {
+          cachedImages: upscaleCache.size,
+        })
         if (statusTimer) window.clearTimeout(statusTimer)
         if (animationFrame) cancelAnimationFrame(animationFrame)
         cancelUpscale()
         upscaleCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
         upscaleCache.clear()
+        if (sourceImage.src.startsWith('data:')) sourceImage.src = ''
+        logImageEnhancement('info', 'overlay_cleanup_complete', enhancementContext)
       }
 
-      overlay.setImageEnhancementEnabled = (nextEnabled: boolean): void => {
-        if (!nextEnabled) {
-          cancelUpscale()
-          return
-        }
+      overlay.setImageEnhancementMode = (nextMode: ImageEnhancementMode): void => {
+        cancelUpscale()
+        logImageEnhancement('info', 'mode_changed', enhancementContext, {
+          mode: nextMode,
+        })
+        if (nextMode === 'off') return
 
+        scheduleUpscale()
+      }
+
+      overlay.setAiEnhancementStrength = (nextStrength: number): void => {
+        if (activeEnhancementMode !== 'ai') return
+        cancelUpscale()
+        logImageEnhancement('info', 'ai_strength_changed', enhancementContext, {
+          strength: nextStrength,
+        })
         scheduleUpscale()
       }
 
@@ -945,10 +1275,16 @@ export default defineContentScript({
       overlay?.remove()
     }
 
-    function applyImageEnhancementEnabled(value: boolean): void {
-      enhancementEnabled = value
+    function applyImageEnhancementMode(value: ImageEnhancementMode): void {
+      activeEnhancementMode = value
       const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
-      overlay?.setImageEnhancementEnabled?.(value)
+      overlay?.setImageEnhancementMode?.(value)
+    }
+
+    function applyAiEnhancementStrength(value: number): void {
+      activeAiEnhancementStrength = resolveAiEnhancementStrength(value)
+      const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
+      overlay?.setAiEnhancementStrength?.(activeAiEnhancementStrength)
     }
 
     // --- Image click handler ---
@@ -1114,8 +1450,12 @@ export default defineContentScript({
       )
     })
 
-    imageEnhancementEnabled.watch((nextEnabled) => {
-      applyImageEnhancementEnabled(nextEnabled !== false)
+    imageEnhancementMode.watch((nextMode) => {
+      if (isImageEnhancementMode(nextMode)) applyImageEnhancementMode(nextMode)
+    })
+
+    aiEnhancementStrength.watch((nextStrength) => {
+      applyAiEnhancementStrength(nextStrength)
     })
 
     disabledSites.watch((nextSites) => {
@@ -1137,9 +1477,17 @@ export default defineContentScript({
       }
 
       if (isImageEnhancementMessage(msg)) {
-        applyImageEnhancementEnabled(msg.enabled)
+        applyImageEnhancementMode(msg.mode)
+      }
+
+      if (isAiEnhancementStrengthMessage(msg)) {
+        applyAiEnhancementStrength(msg.strength)
       }
     })
+
+    window.addEventListener('pagehide', () => {
+      disposeRealEsrgan({ sessionId: 'content-script' })
+    }, { once: true })
 
     // Initial scan - runs at document_idle after DOM is ready
     scanImages()

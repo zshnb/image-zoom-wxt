@@ -25,7 +25,31 @@
   },
   "popupImageEnhancement": {
     "message": "图片清晰算法",
-    "description": "清晰算法开关标签"
+    "description": "清晰算法模式选择标签"
+  },
+  "enhancementModeAi": {
+    "message": "AI · Real-ESRGAN",
+    "description": "AI 图片清晰模式"
+  },
+  "enhancementModeLanczos": {
+    "message": "锐利 · Lanczos",
+    "description": "Lanczos 图片清晰模式"
+  },
+  "enhancementModeOff": {
+    "message": "关闭",
+    "description": "关闭图片清晰模式"
+  },
+  "popupAiEnhancementStrength": {
+    "message": "AI 增强强度",
+    "description": "AI 图片增强强度标签"
+  },
+  "popupAiEnhancementNatural": {
+    "message": "自然",
+    "description": "AI 图片增强强度自然端标签"
+  },
+  "popupAiEnhancementStrong": {
+    "message": "增强",
+    "description": "AI 图片增强强度增强端标签"
   },
   "popupCurrentSite": {
     "message": "当前站点",
@@ -44,7 +68,7 @@
     "description": "当前站点不可用标签"
   },
   "viewerImageProcessing": {
-    "message": "正在提高清晰度",
+    "message": "正在本地增强图片",
     "description": "图片清晰算法处理中提示"
   },
   "viewerOpenImage": {

@@ -1,20 +1,39 @@
 import { useEffect, useState } from 'react'
 import {
+  DEFAULT_AI_ENHANCEMENT_STRENGTH,
   DEFAULT_TRIGGER_SHORTCUT,
+  aiEnhancementStrength,
   disabledSites,
   imageEnhancementEnabled,
+  imageEnhancementMode,
+  imageEnhancementModes,
+  isImageEnhancementMode,
   isTriggerShortcutCode,
+  resolveImageEnhancementMode,
+  resolveAiEnhancementStrength,
   triggerShortcut,
   triggerShortcuts,
+  type ImageEnhancementMode,
   type TriggerShortcutCode,
 } from '@/utils/storage'
 
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
-type ImageEnhancementMessage = { type: 'UPDATE_IMAGE_ENHANCEMENT'; enabled: boolean }
+type ImageEnhancementMessage = {
+  type: 'UPDATE_IMAGE_ENHANCEMENT_MODE'
+  mode: ImageEnhancementMode
+}
+type AiEnhancementStrengthMessage = {
+  type: 'UPDATE_AI_ENHANCEMENT_STRENGTH'
+  strength: number
+}
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
 type PageStatusResponse = { hostname: string; enabled: boolean }
-type PopupMessage = ShortcutMessage | ImageEnhancementMessage | ToggleMessage
+type PopupMessage =
+  | ShortcutMessage
+  | ImageEnhancementMessage
+  | AiEnhancementStrengthMessage
+  | ToggleMessage
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type MessageName = Parameters<typeof browser.i18n.getMessage>[0]
 
@@ -45,25 +64,46 @@ function App() {
   const [tabId, setTabId] = useState<number | null>(null)
   const [shortcutCode, setShortcutCode] = useState<TriggerShortcutCode>(DEFAULT_TRIGGER_SHORTCUT)
   const [shortcutState, setShortcutState] = useState<SaveState>('idle')
-  const [isImageEnhancementEnabled, setIsImageEnhancementEnabled] = useState(true)
+  const [activeImageEnhancementMode, setActiveImageEnhancementMode] =
+    useState<ImageEnhancementMode>('ai')
   const [imageEnhancementState, setImageEnhancementState] = useState<SaveState>('idle')
+  const [activeAiEnhancementStrength, setActiveAiEnhancementStrength] =
+    useState(DEFAULT_AI_ENHANCEMENT_STRENGTH)
+  const [aiEnhancementStrengthState, setAiEnhancementStrengthState] =
+    useState<SaveState>('idle')
   const [hostname, setHostname] = useState('')
   const [isSiteEnabled, setIsSiteEnabled] = useState(true)
   const [siteState, setSiteState] = useState<SaveState>('idle')
 
   useEffect(() => {
     const init = async (): Promise<void> => {
-      const [[tab], storedShortcut, storedImageEnhancementEnabled] = await Promise.all([
+      const [
+        [tab],
+        storedShortcut,
+        storedImageEnhancementMode,
+        storedImageEnhancementEnabled,
+        storedAiEnhancementStrength,
+      ] = await Promise.all([
         browser.tabs.query({ active: true, currentWindow: true }),
         triggerShortcut.getValue(),
+        imageEnhancementMode.getValue(),
         imageEnhancementEnabled.getValue(),
+        aiEnhancementStrength.getValue(),
       ])
       const activeTabId = tab?.id ?? null
 
       setShortcutCode(
         isTriggerShortcutCode(storedShortcut) ? storedShortcut : DEFAULT_TRIGGER_SHORTCUT,
       )
-      setIsImageEnhancementEnabled(storedImageEnhancementEnabled !== false)
+      setActiveImageEnhancementMode(
+        resolveImageEnhancementMode(
+          storedImageEnhancementMode,
+          storedImageEnhancementEnabled,
+        ),
+      )
+      setActiveAiEnhancementStrength(
+        resolveAiEnhancementStrength(storedAiEnhancementStrength),
+      )
       setTabId(activeTabId)
 
       if (activeTabId === null) return
@@ -112,18 +152,40 @@ function App() {
     }
   }
 
-  const onImageEnhancementChange = async (enabled: boolean): Promise<void> => {
-    const previousValue = isImageEnhancementEnabled
-    setIsImageEnhancementEnabled(enabled)
+  const onImageEnhancementChange = async (value: string): Promise<void> => {
+    if (!isImageEnhancementMode(value)) return
+
+    const previousValue = activeImageEnhancementMode
+    setActiveImageEnhancementMode(value)
     setImageEnhancementState('saving')
 
     try {
-      await imageEnhancementEnabled.setValue(enabled)
-      await notifyActiveTab({ type: 'UPDATE_IMAGE_ENHANCEMENT', enabled })
+      await Promise.all([
+        imageEnhancementMode.setValue(value),
+        imageEnhancementEnabled.setValue(value !== 'off'),
+      ])
+      await notifyActiveTab({ type: 'UPDATE_IMAGE_ENHANCEMENT_MODE', mode: value })
       setImageEnhancementState('saved')
     } catch {
-      setIsImageEnhancementEnabled(previousValue)
+      setActiveImageEnhancementMode(previousValue)
       setImageEnhancementState('error')
+    }
+  }
+
+  const onAiEnhancementStrengthChange = async (value: string): Promise<void> => {
+    const nextValue = resolveAiEnhancementStrength(Number(value))
+    setActiveAiEnhancementStrength(nextValue)
+    setAiEnhancementStrengthState('saving')
+
+    try {
+      await aiEnhancementStrength.setValue(nextValue)
+      await notifyActiveTab({
+        type: 'UPDATE_AI_ENHANCEMENT_STRENGTH',
+        strength: nextValue,
+      })
+      setAiEnhancementStrengthState('saved')
+    } catch {
+      setAiEnhancementStrengthState('error')
     }
   }
 
@@ -151,6 +213,7 @@ function App() {
 
   const shortcutStatusLabel = getStatusLabel(shortcutState)
   const imageEnhancementStatusLabel = getStatusLabel(imageEnhancementState)
+  const aiEnhancementStrengthStatusLabel = getStatusLabel(aiEnhancementStrengthState)
   const siteStatusLabel = getStatusLabel(siteState)
 
   return (
@@ -186,11 +249,27 @@ function App() {
           )}
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-          <p className="text-sm font-medium text-zinc-950 dark:text-zinc-100">
-            {t('popupImageEnhancement')}
-          </p>
-          <div className="flex items-center gap-2">
+        <div className="mt-3 flex items-end justify-between gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <label className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-zinc-950 dark:text-zinc-100">
+              {t('popupImageEnhancement')}
+            </span>
+            <select
+              value={activeImageEnhancementMode}
+              disabled={imageEnhancementState === 'saving'}
+              onChange={(event) => {
+                void onImageEnhancementChange(event.target.value)
+              }}
+              className="mt-2 h-10 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-sm font-medium text-zinc-950 outline-none transition-colors focus:border-blue-600 focus:bg-white disabled:cursor-wait dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-blue-500"
+            >
+              {imageEnhancementModes.map((mode) => (
+                <option key={mode.value} value={mode.value}>
+                  {t(mode.messageName)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex min-h-10 items-center pb-0.5">
             {imageEnhancementStatusLabel && (
               <span
                 className={`text-xs font-medium ${getStatusClass(imageEnhancementState)}`}
@@ -198,29 +277,50 @@ function App() {
                 {imageEnhancementStatusLabel}
               </span>
             )}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isImageEnhancementEnabled}
-              aria-label={t('popupImageEnhancement')}
-              disabled={imageEnhancementState === 'saving'}
-              onClick={() => {
-                void onImageEnhancementChange(!isImageEnhancementEnabled)
-              }}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 focus:ring-offset-white disabled:cursor-wait dark:focus:ring-blue-500 dark:focus:ring-offset-zinc-900 ${
-                isImageEnhancementEnabled
-                  ? 'bg-blue-600 dark:bg-blue-500'
-                  : 'bg-zinc-300 dark:bg-zinc-700'
-              }`}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                  isImageEnhancementEnabled ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
           </div>
         </div>
+
+        {activeImageEnhancementMode === 'ai' && (
+          <div className="mt-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-950">
+            <div className="flex items-center justify-between gap-3">
+              <label
+                htmlFor="ai-enhancement-strength"
+                className="text-xs font-medium text-zinc-600 dark:text-zinc-400"
+              >
+                {t('popupAiEnhancementStrength')}
+              </label>
+              <div className="flex items-center gap-2">
+                {aiEnhancementStrengthStatusLabel && (
+                  <span
+                    className={`text-xs font-medium ${getStatusClass(aiEnhancementStrengthState)}`}
+                  >
+                    {aiEnhancementStrengthStatusLabel}
+                  </span>
+                )}
+                <span className="min-w-9 text-right text-xs font-semibold tabular-nums text-zinc-950 dark:text-zinc-100">
+                  {activeAiEnhancementStrength}%
+                </span>
+              </div>
+            </div>
+            <input
+              id="ai-enhancement-strength"
+              type="range"
+              min="0"
+              max="100"
+              step="10"
+              value={activeAiEnhancementStrength}
+              aria-valuetext={`${activeAiEnhancementStrength}%`}
+              onChange={(event) => {
+                void onAiEnhancementStrengthChange(event.target.value)
+              }}
+              className="mt-2 h-2 w-full cursor-pointer accent-blue-600 dark:accent-blue-500"
+            />
+            <div className="mt-1 flex justify-between text-[11px] text-zinc-500 dark:text-zinc-500">
+              <span>{t('popupAiEnhancementNatural')}</span>
+              <span>{t('popupAiEnhancementStrong')}</span>
+            </div>
+          </div>
+        )}
 
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
           <div className="min-w-0">

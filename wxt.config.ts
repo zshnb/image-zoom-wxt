@@ -25,6 +25,16 @@ export default defineConfig({
       },
     },
     permissions: ['storage', 'downloads'],
+    host_permissions: ['http://*/*', 'https://*/*'],
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
+    web_accessible_resources: [
+      {
+        resources: ['litert-runner.html', 'litert/wasm/*', 'models/*.tflite'],
+        matches: ['<all_urls>'],
+      },
+    ],
   },
   vite: () => ({
     plugins: [tailwindcss()],

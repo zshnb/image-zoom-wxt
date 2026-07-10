@@ -23,7 +23,7 @@ Main features:
 - Wheel zoom up to 10x with smooth scaling
 - Drag to pan around enlarged images naturally
 - Open the original image, copy its link, or save it from the viewer
-- Optional local clarity mode for sharper enlargement when the image can be processed in your browser
+- Local clarity modes: strength-adjustable AI enhancement with Real-ESRGAN, sharp Lanczos scaling, or off
 - Custom trigger key: Shift, Alt, Ctrl, or Command
 - Enable or disable the extension per site
 - Works on dynamic pages and image buttons
@@ -53,7 +53,7 @@ Use it when you want to inspect an image quickly without changing your browsing 
 - 支持滚轮缩放，最高可放大到 10 倍
 - 放大后可拖动图片查看局部细节
 - 可直接打开原图、复制图片链接或下载图片
-- 可选择开启本地清晰模式，在图片允许处理时进行更清晰的放大
+- 可选择 AI Real-ESRGAN、锐利 Lanczos 或关闭本地清晰算法，并可调节 AI 增强强度
 - 可自定义触发按键：Shift、Alt、Ctrl 或 Command
 - 可按站点启用或禁用
 - 支持动态加载的网页图片和按钮内图片
@@ -61,3 +61,15 @@ Use it when you want to inspect an image quickly without changing your browsing 
 点击图片放大器刻意保持轻量：不自动悬停预览，不需要账号，也不把图片上传到远程服务处理。清晰模式在浏览器本地运行，图片保留在你的浏览器中。
 
 适合在商品图片太小、文章截图看不清、社交媒体缩略图需要放大时使用。
+
+## Enhancement diagnostics
+
+Open the inspected page's DevTools console and filter for:
+
+```text
+[ImageZoom][enhancement]
+```
+
+Structured events include the overlay session and request IDs, runtime/model load time,
+selected backend, per-tile inference time, total upscale time, cache hits, cancellation,
+fallback reasons, and cleanup.

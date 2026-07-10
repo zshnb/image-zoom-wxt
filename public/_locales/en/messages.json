@@ -25,7 +25,31 @@
   },
   "popupImageEnhancement": {
     "message": "Image clarity algorithm",
-    "description": "Image enhancement switch label"
+    "description": "Image enhancement mode selector label"
+  },
+  "enhancementModeAi": {
+    "message": "AI · Real-ESRGAN",
+    "description": "AI image enhancement mode"
+  },
+  "enhancementModeLanczos": {
+    "message": "Sharp · Lanczos",
+    "description": "Lanczos image enhancement mode"
+  },
+  "enhancementModeOff": {
+    "message": "Off",
+    "description": "Disabled image enhancement mode"
+  },
+  "popupAiEnhancementStrength": {
+    "message": "AI enhancement strength",
+    "description": "AI image enhancement strength label"
+  },
+  "popupAiEnhancementNatural": {
+    "message": "Natural",
+    "description": "Natural end of the AI enhancement strength range"
+  },
+  "popupAiEnhancementStrong": {
+    "message": "Enhanced",
+    "description": "Enhanced end of the AI enhancement strength range"
   },
   "popupCurrentSite": {
     "message": "Current site",
@@ -44,7 +68,7 @@
     "description": "Current site unavailable label"
   },
   "viewerImageProcessing": {
-    "message": "Sharpening image",
+    "message": "Enhancing image locally",
     "description": "Image enhancement processing label"
   },
   "viewerOpenImage": {

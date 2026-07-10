@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@litertjs/core':
+        specifier: 2.5.2
+        version: 2.5.2
       react:
         specifier: ^19.2.4
         version: 19.2.4
@@ -323,6 +326,12 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@litertjs/core@2.5.2':
+    resolution: {integrity: sha512-2O4p5Me8B3KbW9EPU9Xe6iKl2jZ5nZeGxRBvhm5x42Wj7qb3xk2CjibPLA0eSyt2HuELu2hCIZ+7gHZM5cipcw==}
+
+  '@litertjs/wasm-utils@2.5.0':
+    resolution: {integrity: sha512-zhMAqJRJ3ROi48flZxYx+K2MiMllJVuH7oeumpSIfQMBeOb6JyLV/7ltLbY6E+nERUAfNwzIBqjslWAeXcO6iQ==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2315,6 +2324,12 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@litertjs/core@2.5.2':
+    dependencies:
+      '@litertjs/wasm-utils': 2.5.0
+
+  '@litertjs/wasm-utils@2.5.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
