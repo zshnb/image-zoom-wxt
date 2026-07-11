@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
 import {
-  DEFAULT_AI_ENHANCEMENT_STRENGTH,
+  DEFAULT_AI_ENHANCEMENT_MODEL,
   DEFAULT_TRIGGER_SHORTCUT,
-  aiEnhancementStrength,
+  aiEnhancementModel,
+  aiEnhancementModels,
   disabledSites,
   imageEnhancementEnabled,
   imageEnhancementMode,
   imageEnhancementModes,
+  isAiEnhancementModel,
   isImageEnhancementMode,
   isTriggerShortcutCode,
+  resolveAiEnhancementModel,
   resolveImageEnhancementMode,
-  resolveAiEnhancementStrength,
   triggerShortcut,
   triggerShortcuts,
+  type AiEnhancementModel,
   type ImageEnhancementMode,
   type TriggerShortcutCode,
 } from '@/utils/storage'
@@ -22,9 +25,9 @@ type ImageEnhancementMessage = {
   type: 'UPDATE_IMAGE_ENHANCEMENT_MODE'
   mode: ImageEnhancementMode
 }
-type AiEnhancementStrengthMessage = {
-  type: 'UPDATE_AI_ENHANCEMENT_STRENGTH'
-  strength: number
+type AiEnhancementModelMessage = {
+  type: 'UPDATE_AI_ENHANCEMENT_MODEL'
+  model: AiEnhancementModel
 }
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
@@ -32,7 +35,7 @@ type PageStatusResponse = { hostname: string; enabled: boolean }
 type PopupMessage =
   | ShortcutMessage
   | ImageEnhancementMessage
-  | AiEnhancementStrengthMessage
+  | AiEnhancementModelMessage
   | ToggleMessage
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type MessageName = Parameters<typeof browser.i18n.getMessage>[0]
@@ -67,9 +70,9 @@ function App() {
   const [activeImageEnhancementMode, setActiveImageEnhancementMode] =
     useState<ImageEnhancementMode>('ai')
   const [imageEnhancementState, setImageEnhancementState] = useState<SaveState>('idle')
-  const [activeAiEnhancementStrength, setActiveAiEnhancementStrength] =
-    useState(DEFAULT_AI_ENHANCEMENT_STRENGTH)
-  const [aiEnhancementStrengthState, setAiEnhancementStrengthState] =
+  const [activeAiEnhancementModel, setActiveAiEnhancementModel] =
+    useState<AiEnhancementModel>(DEFAULT_AI_ENHANCEMENT_MODEL)
+  const [aiEnhancementModelState, setAiEnhancementModelState] =
     useState<SaveState>('idle')
   const [hostname, setHostname] = useState('')
   const [isSiteEnabled, setIsSiteEnabled] = useState(true)
@@ -82,13 +85,13 @@ function App() {
         storedShortcut,
         storedImageEnhancementMode,
         storedImageEnhancementEnabled,
-        storedAiEnhancementStrength,
+        storedAiEnhancementModel,
       ] = await Promise.all([
         browser.tabs.query({ active: true, currentWindow: true }),
         triggerShortcut.getValue(),
         imageEnhancementMode.getValue(),
         imageEnhancementEnabled.getValue(),
-        aiEnhancementStrength.getValue(),
+        aiEnhancementModel.getValue(),
       ])
       const activeTabId = tab?.id ?? null
 
@@ -101,9 +104,7 @@ function App() {
           storedImageEnhancementEnabled,
         ),
       )
-      setActiveAiEnhancementStrength(
-        resolveAiEnhancementStrength(storedAiEnhancementStrength),
-      )
+      setActiveAiEnhancementModel(resolveAiEnhancementModel(storedAiEnhancementModel))
       setTabId(activeTabId)
 
       if (activeTabId === null) return
@@ -172,20 +173,20 @@ function App() {
     }
   }
 
-  const onAiEnhancementStrengthChange = async (value: string): Promise<void> => {
-    const nextValue = resolveAiEnhancementStrength(Number(value))
-    setActiveAiEnhancementStrength(nextValue)
-    setAiEnhancementStrengthState('saving')
+  const onAiEnhancementModelChange = async (value: string): Promise<void> => {
+    if (!isAiEnhancementModel(value)) return
+
+    const previousValue = activeAiEnhancementModel
+    setActiveAiEnhancementModel(value)
+    setAiEnhancementModelState('saving')
 
     try {
-      await aiEnhancementStrength.setValue(nextValue)
-      await notifyActiveTab({
-        type: 'UPDATE_AI_ENHANCEMENT_STRENGTH',
-        strength: nextValue,
-      })
-      setAiEnhancementStrengthState('saved')
+      await aiEnhancementModel.setValue(value)
+      await notifyActiveTab({ type: 'UPDATE_AI_ENHANCEMENT_MODEL', model: value })
+      setAiEnhancementModelState('saved')
     } catch {
-      setAiEnhancementStrengthState('error')
+      setActiveAiEnhancementModel(previousValue)
+      setAiEnhancementModelState('error')
     }
   }
 
@@ -213,7 +214,7 @@ function App() {
 
   const shortcutStatusLabel = getStatusLabel(shortcutState)
   const imageEnhancementStatusLabel = getStatusLabel(imageEnhancementState)
-  const aiEnhancementStrengthStatusLabel = getStatusLabel(aiEnhancementStrengthState)
+  const aiEnhancementModelStatusLabel = getStatusLabel(aiEnhancementModelState)
   const siteStatusLabel = getStatusLabel(siteState)
 
   return (
@@ -282,43 +283,37 @@ function App() {
 
         {activeImageEnhancementMode === 'ai' && (
           <div className="mt-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-950">
-            <div className="flex items-center justify-between gap-3">
-              <label
-                htmlFor="ai-enhancement-strength"
-                className="text-xs font-medium text-zinc-600 dark:text-zinc-400"
-              >
-                {t('popupAiEnhancementStrength')}
+            <div className="flex items-end justify-between gap-3">
+              <label className="min-w-0 flex-1">
+                <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  {t('popupAiEnhancementModel')}
+                </span>
+                <select
+                  value={activeAiEnhancementModel}
+                  disabled={aiEnhancementModelState === 'saving'}
+                  onChange={(event) => {
+                    void onAiEnhancementModelChange(event.target.value)
+                  }}
+                  className="mt-2 h-9 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs font-medium text-zinc-950 outline-none transition-colors focus:border-blue-600 disabled:cursor-wait dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500"
+                >
+                  {aiEnhancementModels.map((model) => (
+                    <option key={model.value} value={model.value}>
+                      {t(model.messageName)}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <div className="flex items-center gap-2">
-                {aiEnhancementStrengthStatusLabel && (
+              <div className="flex min-h-9 items-center pb-0.5">
+                {aiEnhancementModelStatusLabel && (
                   <span
-                    className={`text-xs font-medium ${getStatusClass(aiEnhancementStrengthState)}`}
+                    className={`text-xs font-medium ${getStatusClass(aiEnhancementModelState)}`}
                   >
-                    {aiEnhancementStrengthStatusLabel}
+                    {aiEnhancementModelStatusLabel}
                   </span>
                 )}
-                <span className="min-w-9 text-right text-xs font-semibold tabular-nums text-zinc-950 dark:text-zinc-100">
-                  {activeAiEnhancementStrength}%
-                </span>
               </div>
             </div>
-            <input
-              id="ai-enhancement-strength"
-              type="range"
-              min="0"
-              max="100"
-              step="10"
-              value={activeAiEnhancementStrength}
-              aria-valuetext={`${activeAiEnhancementStrength}%`}
-              onChange={(event) => {
-                void onAiEnhancementStrengthChange(event.target.value)
-              }}
-              className="mt-2 h-2 w-full cursor-pointer accent-blue-600 dark:accent-blue-500"
-            />
-            <div className="mt-1 flex justify-between text-[11px] text-zinc-500 dark:text-zinc-500">
-              <span>{t('popupAiEnhancementNatural')}</span>
-              <span>{t('popupAiEnhancementStrong')}</span>
-            </div>
+
           </div>
         )}
 

@@ -20,6 +20,20 @@ Export archive: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-
 Packaged model SHA-256: 3556594da2688410557c98d2857d4628ddd46208a5ce61cfa9c81a1a789487bf
 License: BSD 3-Clause
 
+RealESRGAN_x4plus
+------------------
+Source implementation: https://github.com/xinntao/Real-ESRGAN
+Official weights: https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
+Official weights SHA-256: 4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1
+Model export: Qualcomm AI Hub Models 0.57.3
+Model card: https://huggingface.co/qualcomm/Real-ESRGAN-x4plus
+Export archive: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.57.3/real_esrgan_x4plus-tflite-w8a8.zip
+Export archive SHA-256: cfaec8e3491ee7ebdaaf3665bab6f8ed75cc2adbeb3c0f6db343df512440fceb
+Packaged format: W8A8 TFLite, fixed NHWC uint8 input 1x128x128x3 and output 1x512x512x3
+Input and output quantization: scale 0.003921568859368563, zero point 0
+Packaged model SHA-256: 1b40d1e68931fa6bd599e7ebe62c536cf02cb888c3a49a817ee646c2906e326a
+License: BSD 3-Clause
+
 Copyright (c) 2021, Xintao Wang
 All rights reserved.
 

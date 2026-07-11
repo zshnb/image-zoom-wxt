@@ -1,3 +1,5 @@
+import type { AiEnhancementModel } from '@/utils/storage'
+
 export type EnhancementLogContext = {
   sessionId: string
   requestId?: number
@@ -6,6 +8,7 @@ export type EnhancementLogContext = {
 type Accelerator = 'webgpu' | 'wasm'
 type EnhancementLogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EnhancementLogData = Record<string, unknown>
+type ModelInput = Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer>
 type TileResult = {
   backend: Accelerator
   rgba: Uint8ClampedArray<ArrayBuffer>
@@ -26,13 +29,33 @@ type RunnerClient = {
   nextId: number
 }
 
-const MODEL_INPUT_SIZE = 128
-const MODEL_OUTPUT_SIZE = 512
-const MODEL_SCALE = MODEL_OUTPUT_SIZE / MODEL_INPUT_SIZE
-const TILE_PADDING = 16
-const TILE_CONTENT_SIZE = MODEL_INPUT_SIZE - TILE_PADDING * 2
-const MAX_AI_TILES = 100
-const MAX_WASM_AI_TILES = 9
+type ModelConfig = {
+  inputSize: number
+  outputSize: number
+  padding: number
+  maxTiles: number
+  maxWasmTiles: number
+  dtype: 'float32' | 'uint8'
+}
+
+const MODEL_CONFIGS: Record<AiEnhancementModel, ModelConfig> = {
+  'general-x4v3': {
+    inputSize: 128,
+    outputSize: 512,
+    padding: 16,
+    maxTiles: 100,
+    maxWasmTiles: 9,
+    dtype: 'float32',
+  },
+  x4plus: {
+    inputSize: 128,
+    outputSize: 512,
+    padding: 16,
+    maxTiles: 100,
+    maxWasmTiles: 0,
+    dtype: 'uint8',
+  },
+}
 const RUNNER_TIMEOUT_MS = 120_000
 const LOG_PREFIX = '[ImageZoom][enhancement]'
 
@@ -179,7 +202,8 @@ async function getRunner(context: EnhancementLogContext): Promise<RunnerClient> 
 }
 
 async function runTile(
-  input: Float32Array,
+  input: ModelInput,
+  model: AiEnhancementModel,
   context: EnhancementLogContext,
   tile: EnhancementLogData,
   signal: AbortSignal,
@@ -214,6 +238,7 @@ async function runTile(
       type: 'RUN_TILE',
       id,
       input,
+      model,
       context,
       tile,
     })
@@ -221,22 +246,31 @@ async function runTile(
 }
 
 function fillTileInput(
-  input: Float32Array,
+  input: ModelInput,
   source: ImageData,
   tileX: number,
   tileY: number,
+  inputSize: number,
+  padding: number,
+  dtype: 'float32' | 'uint8',
 ): void {
   const { data, width, height } = source
   let offset = 0
 
-  for (let y = 0; y < MODEL_INPUT_SIZE; y += 1) {
-    const sourceY = Math.min(height - 1, Math.max(0, tileY + y - TILE_PADDING))
-    for (let x = 0; x < MODEL_INPUT_SIZE; x += 1) {
-      const sourceX = Math.min(width - 1, Math.max(0, tileX + x - TILE_PADDING))
+  for (let y = 0; y < inputSize; y += 1) {
+    const sourceY = Math.min(height - 1, Math.max(0, tileY + y - padding))
+    for (let x = 0; x < inputSize; x += 1) {
+      const sourceX = Math.min(width - 1, Math.max(0, tileX + x - padding))
       const sourceOffset = (sourceY * width + sourceX) * 4
-      input[offset] = data[sourceOffset] / 255
-      input[offset + 1] = data[sourceOffset + 1] / 255
-      input[offset + 2] = data[sourceOffset + 2] / 255
+      if (dtype === 'uint8') {
+        input[offset] = data[sourceOffset]
+        input[offset + 1] = data[sourceOffset + 1]
+        input[offset + 2] = data[sourceOffset + 2]
+      } else {
+        input[offset] = data[sourceOffset] / 255
+        input[offset + 1] = data[sourceOffset + 1] / 255
+        input[offset + 2] = data[sourceOffset + 2] / 255
+      }
       offset += 3
     }
   }
@@ -254,7 +288,7 @@ export async function createRealEsrganObjectUrl(
   source: HTMLImageElement,
   targetWidth: number,
   targetHeight: number,
-  strength: number,
+  model: AiEnhancementModel,
   context: EnhancementLogContext,
   signal: AbortSignal,
 ): Promise<string | null> {
@@ -262,23 +296,27 @@ export async function createRealEsrganObjectUrl(
   const sourceHeight = source.naturalHeight
   if (sourceWidth < 1 || sourceHeight < 1) return null
 
+  const config = MODEL_CONFIGS[model]
+  const modelScale = config.outputSize / config.inputSize
+  const tileContentSize = config.inputSize - config.padding * 2
   const startedAt = performance.now()
-  const columns = Math.ceil(sourceWidth / TILE_CONTENT_SIZE)
-  const rows = Math.ceil(sourceHeight / TILE_CONTENT_SIZE)
+  const columns = Math.ceil(sourceWidth / tileContentSize)
+  const rows = Math.ceil(sourceHeight / tileContentSize)
   const tileCount = columns * rows
-  if (tileCount > MAX_AI_TILES) {
-    throw new Error(`Real-ESRGAN tile limit exceeded: ${tileCount} > ${MAX_AI_TILES}`)
+  if (tileCount > config.maxTiles) {
+    throw new Error(`Real-ESRGAN ${model} tile limit exceeded: ${tileCount} > ${config.maxTiles}`)
   }
 
   logImageEnhancement('info', 'ai_upscale_start', context, {
+    model,
     sourceWidth,
     sourceHeight,
     targetWidth,
     targetHeight,
     tileCount,
-    tileContentSize: TILE_CONTENT_SIZE,
-    tilePadding: TILE_PADDING,
-    strength,
+    tileContentSize,
+    tilePadding: config.padding,
+    dtype: config.dtype,
   })
 
   const sourceCanvas = document.createElement('canvas')
@@ -303,45 +341,57 @@ export async function createRealEsrganObjectUrl(
   if (!targetContext) return null
 
   const tileCanvas = document.createElement('canvas')
-  tileCanvas.width = MODEL_OUTPUT_SIZE
-  tileCanvas.height = MODEL_OUTPUT_SIZE
+  tileCanvas.width = config.outputSize
+  tileCanvas.height = config.outputSize
   const tileContext = tileCanvas.getContext('2d')
   if (!tileContext) return null
 
-  const input = new Float32Array(MODEL_INPUT_SIZE * MODEL_INPUT_SIZE * 3)
+  const input = config.dtype === 'uint8'
+    ? new Uint8Array(config.inputSize * config.inputSize * 3)
+    : new Float32Array(config.inputSize * config.inputSize * 3)
   let backend: Accelerator | null = null
   let tileIndex = 0
 
   try {
     for (let row = 0; row < rows; row += 1) {
-      const sourceY = row * TILE_CONTENT_SIZE
-      const contentHeight = Math.min(TILE_CONTENT_SIZE, sourceHeight - sourceY)
+      const sourceY = row * tileContentSize
+      const contentHeight = Math.min(tileContentSize, sourceHeight - sourceY)
 
       for (let column = 0; column < columns; column += 1) {
         throwIfAborted(signal)
-        const sourceX = column * TILE_CONTENT_SIZE
-        const contentWidth = Math.min(TILE_CONTENT_SIZE, sourceWidth - sourceX)
+        const sourceX = column * tileContentSize
+        const contentWidth = Math.min(tileContentSize, sourceWidth - sourceX)
         tileIndex += 1
-        fillTileInput(input, sourceData, sourceX, sourceY)
+        fillTileInput(
+          input,
+          sourceData,
+          sourceX,
+          sourceY,
+          config.inputSize,
+          config.padding,
+          config.dtype,
+        )
 
-        const result = await runTile(input, context, {
+        const result = await runTile(input, model, context, {
+          model,
           tileIndex,
           tileCount,
           row,
           column,
         }, signal)
         backend = result.backend
-        if (backend === 'wasm' && tileCount > MAX_WASM_AI_TILES) {
+        if (backend === 'wasm' && tileCount > config.maxWasmTiles) {
           logImageEnhancement('warn', 'wasm_tile_limit', context, {
+            model,
             tileCount,
-            maxTiles: MAX_WASM_AI_TILES,
+            maxTiles: config.maxWasmTiles,
           })
           throw new Error(
-            `Real-ESRGAN Wasm tile limit exceeded: ${tileCount} > ${MAX_WASM_AI_TILES}`,
+            `Real-ESRGAN ${model} Wasm tile limit exceeded: ${tileCount} > ${config.maxWasmTiles}`,
           )
         }
         tileContext.putImageData(
-          new ImageData(result.rgba, MODEL_OUTPUT_SIZE, MODEL_OUTPUT_SIZE),
+          new ImageData(result.rgba, config.outputSize, config.outputSize),
           0,
           0,
         )
@@ -357,10 +407,10 @@ export async function createRealEsrganObjectUrl(
 
         targetContext.drawImage(
           tileCanvas,
-          TILE_PADDING * MODEL_SCALE,
-          TILE_PADDING * MODEL_SCALE,
-          contentWidth * MODEL_SCALE,
-          contentHeight * MODEL_SCALE,
+          config.padding * modelScale,
+          config.padding * modelScale,
+          contentWidth * modelScale,
+          contentHeight * modelScale,
           targetX,
           targetY,
           targetRight - targetX,
@@ -370,14 +420,6 @@ export async function createRealEsrganObjectUrl(
     }
 
     throwIfAborted(signal)
-    const normalizedStrength = Math.min(100, Math.max(0, strength)) / 100
-    if (normalizedStrength < 1) {
-      targetContext.globalAlpha = 1 - normalizedStrength
-      targetContext.imageSmoothingEnabled = true
-      targetContext.imageSmoothingQuality = 'high'
-      targetContext.drawImage(source, 0, 0, targetWidth, targetHeight)
-      targetContext.globalAlpha = 1
-    }
     targetContext.globalCompositeOperation = 'destination-in'
     targetContext.drawImage(source, 0, 0, targetWidth, targetHeight)
     targetContext.globalCompositeOperation = 'source-over'
@@ -389,13 +431,13 @@ export async function createRealEsrganObjectUrl(
       throwIfAborted(signal)
     }
     logImageEnhancement('info', 'ai_upscale_complete', context, {
+      model,
       backend,
       tileCount,
       durationMs: Math.round(performance.now() - startedAt),
       encodeDurationMs: Math.round(performance.now() - encodeStartedAt),
       targetWidth,
       targetHeight,
-      strength,
     })
     return objectUrl
   } finally {

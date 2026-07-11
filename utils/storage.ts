@@ -31,7 +31,14 @@ export const imageEnhancementModes = [
 
 export type ImageEnhancementMode = (typeof imageEnhancementModes)[number]['value']
 
-export const DEFAULT_AI_ENHANCEMENT_STRENGTH = 50
+export const aiEnhancementModels = [
+  { value: 'general-x4v3', messageName: 'aiModelGeneralX4v3' },
+  { value: 'x4plus', messageName: 'aiModelX4plus' },
+] as const
+
+export type AiEnhancementModel = (typeof aiEnhancementModels)[number]['value']
+
+export const DEFAULT_AI_ENHANCEMENT_MODEL: AiEnhancementModel = 'general-x4v3'
 
 export const imageEnhancementEnabled = storage.defineItem<boolean>(
   'local:imageEnhancementEnabled',
@@ -47,10 +54,10 @@ export const imageEnhancementMode = storage.defineItem<ImageEnhancementMode | nu
   },
 )
 
-export const aiEnhancementStrength = storage.defineItem<number>(
-  'local:aiEnhancementStrength',
+export const aiEnhancementModel = storage.defineItem<AiEnhancementModel>(
+  'local:aiEnhancementModel',
   {
-    fallback: DEFAULT_AI_ENHANCEMENT_STRENGTH,
+    fallback: DEFAULT_AI_ENHANCEMENT_MODEL,
   },
 )
 
@@ -66,11 +73,12 @@ export function resolveImageEnhancementMode(
   return legacyEnabled === false ? 'off' : 'ai'
 }
 
-export function resolveAiEnhancementStrength(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return DEFAULT_AI_ENHANCEMENT_STRENGTH
-  }
-  return Math.min(100, Math.max(0, Math.round(value)))
+export function isAiEnhancementModel(value: unknown): value is AiEnhancementModel {
+  return aiEnhancementModels.some((model) => model.value === value)
+}
+
+export function resolveAiEnhancementModel(value: unknown): AiEnhancementModel {
+  return isAiEnhancementModel(value) ? value : DEFAULT_AI_ENHANCEMENT_MODEL
 }
 
 export function isTriggerShortcutCode(value: unknown): value is TriggerShortcutCode {

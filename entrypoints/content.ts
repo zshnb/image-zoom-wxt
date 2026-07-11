@@ -1,14 +1,17 @@
 import {
+  DEFAULT_AI_ENHANCEMENT_MODEL,
   DEFAULT_TRIGGER_SHORTCUT,
-  aiEnhancementStrength,
+  aiEnhancementModel,
   disabledSites,
   imageEnhancementEnabled,
   imageEnhancementMode,
+  isAiEnhancementModel,
   isImageEnhancementMode,
   isTriggerShortcutCode,
+  resolveAiEnhancementModel,
   resolveImageEnhancementMode,
-  resolveAiEnhancementStrength,
   triggerShortcut,
+  type AiEnhancementModel,
   type ImageEnhancementMode,
   type TriggerShortcutCode,
 } from '@/utils/storage'
@@ -26,9 +29,9 @@ type ImageEnhancementMessage = {
   type: 'UPDATE_IMAGE_ENHANCEMENT_MODE'
   mode: ImageEnhancementMode
 }
-type AiEnhancementStrengthMessage = {
-  type: 'UPDATE_AI_ENHANCEMENT_STRENGTH'
-  strength: number
+type AiEnhancementModelMessage = {
+  type: 'UPDATE_AI_ENHANCEMENT_MODEL'
+  model: AiEnhancementModel
 }
 type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
 type DownloadImageResponse = { ok: boolean }
@@ -46,11 +49,12 @@ type ImageCandidate = { url: string; score: number }
 type ZoomOverlayElement = HTMLDivElement & {
   cleanupImageZoom?: () => void
   setImageEnhancementMode?: (mode: ImageEnhancementMode) => void
-  setAiEnhancementStrength?: (strength: number) => void
+  setAiEnhancementModel?: (model: AiEnhancementModel) => void
 }
 
 const LANCZOS_RADIUS = 3
 const MAX_LANCZOS_SCALE = 4
+const AI_UPSCALE_SCALE = 4
 const MAX_LANCZOS_PIXELS = 6_000_000
 const UPSCALE_IDLE_DELAY_MS = 120
 const RESIZE_YIELD_MS = 12
@@ -88,15 +92,12 @@ function isImageEnhancementMessage(msg: unknown): msg is ImageEnhancementMessage
   )
 }
 
-function isAiEnhancementStrengthMessage(
-  msg: unknown,
-): msg is AiEnhancementStrengthMessage {
+function isAiEnhancementModelMessage(msg: unknown): msg is AiEnhancementModelMessage {
   if (typeof msg !== 'object' || msg === null) return false
   const candidate = msg as Record<string, unknown>
   return (
-    candidate.type === 'UPDATE_AI_ENHANCEMENT_STRENGTH'
-    && typeof candidate.strength === 'number'
-    && Number.isFinite(candidate.strength)
+    candidate.type === 'UPDATE_AI_ENHANCEMENT_MODEL'
+    && isAiEnhancementModel(candidate.model)
   )
 }
 
@@ -510,13 +511,13 @@ export default defineContentScript({
       storedShortcut,
       storedImageEnhancementMode,
       storedImageEnhancementEnabled,
-      storedAiEnhancementStrength,
+      storedAiEnhancementModel,
     ] = await Promise.all([
       disabledSites.getValue(),
       triggerShortcut.getValue(),
       imageEnhancementMode.getValue(),
       imageEnhancementEnabled.getValue(),
-      aiEnhancementStrength.getValue(),
+      aiEnhancementModel.getValue(),
     ])
     let enabled = !sites.includes(hostname)
     let activeShortcut = isTriggerShortcutCode(storedShortcut)
@@ -526,15 +527,13 @@ export default defineContentScript({
       storedImageEnhancementMode,
       storedImageEnhancementEnabled,
     )
-    let activeAiEnhancementStrength = resolveAiEnhancementStrength(
-      storedAiEnhancementStrength,
-    )
+    let activeAiEnhancementModel = resolveAiEnhancementModel(storedAiEnhancementModel)
     let shortcutPressed = false
 
     const HOVERABLE_CLASS = 'image-zoom-hoverable'
     const TRIGGER_ACTIVE_CLASS = 'image-zoom-trigger-active'
     const OVERLAY_ID = 'image-zoom-overlay'
-    const IMAGE_TRIGGER_CONTAINER_SELECTOR = 'button, [role="button"]'
+    const IMAGE_TRIGGER_CONTAINER_SELECTOR = 'a, button, [role="link"], [role="button"]'
 
     // --- CSS injection ---
     const style = document.createElement('style')
@@ -647,7 +646,7 @@ export default defineContentScript({
       logImageEnhancement('info', 'overlay_open', enhancementContext, {
         hostname,
         mode: activeEnhancementMode,
-        aiStrength: activeAiEnhancementStrength,
+        aiModel: activeEnhancementMode === 'ai' ? activeAiEnhancementModel : undefined,
       })
 
       const img = document.createElement('img')
@@ -697,6 +696,7 @@ export default defineContentScript({
       let renderedUpscaleKey = ''
       let sourceReady = false
       let sourceFailed = false
+      let aiUpscaleActivated = false
       let overlayClosed = false
       let statusTimer = 0
       const upscaleCache = new Map<string, string>()
@@ -920,14 +920,19 @@ export default defineContentScript({
         const sourcePixels = sourceWidth * sourceHeight
         if (sourceWidth < 1 || sourceHeight < 1 || sourcePixels >= MAX_LANCZOS_PIXELS) return null
 
-        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
-        const wantedWidth = baseWidth * targetScale * pixelRatio
-        const wantedHeight = baseHeight * targetScale * pixelRatio
-        const neededScale = Math.max(wantedWidth / sourceWidth, wantedHeight / sourceHeight)
+        let upscaleScale = AI_UPSCALE_SCALE
+        if (activeEnhancementMode !== 'ai') {
+          const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+          const wantedWidth = baseWidth * targetScale * pixelRatio
+          const wantedHeight = baseHeight * targetScale * pixelRatio
+          const neededScale = Math.max(wantedWidth / sourceWidth, wantedHeight / sourceHeight)
 
-        if (neededScale < 1.15) return null
+          if (neededScale < 1.15) return null
+          upscaleScale = Math.min(MAX_LANCZOS_SCALE, Math.ceil(neededScale * 2) / 2)
+        } else if (!aiUpscaleActivated) {
+          return null
+        }
 
-        let upscaleScale = Math.min(MAX_LANCZOS_SCALE, Math.ceil(neededScale * 2) / 2)
         let width = Math.round(sourceWidth * upscaleScale)
         let height = Math.round(sourceHeight * upscaleScale)
 
@@ -944,7 +949,9 @@ export default defineContentScript({
 
         return {
           key: `${activeEnhancementMode}:${
-            activeEnhancementMode === 'ai' ? activeAiEnhancementStrength : 'na'
+            activeEnhancementMode === 'ai'
+              ? activeAiEnhancementModel
+              : 'na'
           }:${width}x${height}`,
           width,
           height,
@@ -975,7 +982,7 @@ export default defineContentScript({
         const requestId = upscaleRequestId + 1
         upscaleRequestId = requestId
         const requestMode = activeEnhancementMode
-        const requestAiStrength = activeAiEnhancementStrength
+        const requestAiModel = activeAiEnhancementModel
         const requestContext = { ...enhancementContext, requestId }
         const cached = upscaleCache.get(target.key)
         if (cached) {
@@ -998,7 +1005,8 @@ export default defineContentScript({
           await waitForNextFrame()
           logImageEnhancement('info', 'upscale_request_start', requestContext, {
             mode: requestMode,
-            aiStrength: requestMode === 'ai' ? requestAiStrength : undefined,
+            targetStrategy: requestMode === 'ai' ? 'fixed-maximum' : 'viewport',
+            aiModel: requestMode === 'ai' ? requestAiModel : undefined,
             sourceWidth: sourceImage.naturalWidth,
             sourceHeight: sourceImage.naturalHeight,
             targetWidth: target.width,
@@ -1012,29 +1020,22 @@ export default defineContentScript({
           }
 
           if (requestMode === 'ai') {
-            if (requestAiStrength === 0) {
-              logImageEnhancement('info', 'ai_upscale_bypassed', requestContext, {
-                strength: requestAiStrength,
+            try {
+              objectUrl = await createRealEsrganObjectUrl(
+                enhancementSource,
+                target.width,
+                target.height,
+                requestAiModel,
+                requestContext,
+                abortController.signal,
+              )
+            } catch (error) {
+              if (isEnhancementAbort(error)) throw error
+              logImageEnhancement('warn', 'algorithm_fallback', requestContext, {
+                from: requestAiModel,
                 to: 'lanczos3',
+                errorMessage: error instanceof Error ? error.message : String(error),
               })
-            } else {
-              try {
-                objectUrl = await createRealEsrganObjectUrl(
-                  enhancementSource,
-                  target.width,
-                  target.height,
-                  requestAiStrength,
-                  requestContext,
-                  abortController.signal,
-                )
-              } catch (error) {
-                if (isEnhancementAbort(error)) throw error
-                logImageEnhancement('warn', 'algorithm_fallback', requestContext, {
-                  from: 'real-esrgan',
-                  to: 'lanczos3',
-                  errorMessage: error instanceof Error ? error.message : String(error),
-                })
-              }
             }
           }
 
@@ -1095,7 +1096,11 @@ export default defineContentScript({
       }
 
       const scheduleUpscale = (): void => {
-        if (overlayClosed || activeEnhancementMode === 'off') return
+        if (
+          overlayClosed
+          || activeEnhancementMode === 'off'
+          || (activeEnhancementMode === 'ai' && !aiUpscaleActivated)
+        ) return
         if (upscaleTimer) window.clearTimeout(upscaleTimer)
 
         logImageEnhancement('debug', 'upscale_scheduled', enhancementContext, {
@@ -1182,6 +1187,18 @@ export default defineContentScript({
         e.preventDefault()
         targetScale *= e.deltaY < 0 ? 1.12 : 1 / 1.12
         targetScale = Math.max(1, Math.min(10, targetScale))
+        if (
+          activeEnhancementMode === 'ai'
+          && !aiUpscaleActivated
+          && e.deltaY < 0
+          && targetScale > 1
+        ) {
+          aiUpscaleActivated = true
+          logImageEnhancement('info', 'ai_upscale_activated', enhancementContext, {
+            reason: 'user_zoom',
+            targetScale,
+          })
+        }
         scheduleUpscale()
         if (!animationFrame) {
           animationFrame = requestAnimationFrame(applyScale)
@@ -1249,15 +1266,18 @@ export default defineContentScript({
           mode: nextMode,
         })
         if (nextMode === 'off') return
+        if (nextMode === 'ai' && targetScale > 1) {
+          aiUpscaleActivated = true
+        }
 
         scheduleUpscale()
       }
 
-      overlay.setAiEnhancementStrength = (nextStrength: number): void => {
+      overlay.setAiEnhancementModel = (nextModel: AiEnhancementModel): void => {
         if (activeEnhancementMode !== 'ai') return
         cancelUpscale()
-        logImageEnhancement('info', 'ai_strength_changed', enhancementContext, {
-          strength: nextStrength,
+        logImageEnhancement('info', 'ai_model_changed', enhancementContext, {
+          model: nextModel,
         })
         scheduleUpscale()
       }
@@ -1281,10 +1301,12 @@ export default defineContentScript({
       overlay?.setImageEnhancementMode?.(value)
     }
 
-    function applyAiEnhancementStrength(value: number): void {
-      activeAiEnhancementStrength = resolveAiEnhancementStrength(value)
+    function applyAiEnhancementModel(value: AiEnhancementModel): void {
+      activeAiEnhancementModel = isAiEnhancementModel(value)
+        ? value
+        : DEFAULT_AI_ENHANCEMENT_MODEL
       const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
-      overlay?.setAiEnhancementStrength?.(activeAiEnhancementStrength)
+      overlay?.setAiEnhancementModel?.(activeAiEnhancementModel)
     }
 
     // --- Image click handler ---
@@ -1454,8 +1476,8 @@ export default defineContentScript({
       if (isImageEnhancementMode(nextMode)) applyImageEnhancementMode(nextMode)
     })
 
-    aiEnhancementStrength.watch((nextStrength) => {
-      applyAiEnhancementStrength(nextStrength)
+    aiEnhancementModel.watch((nextModel) => {
+      applyAiEnhancementModel(nextModel)
     })
 
     disabledSites.watch((nextSites) => {
@@ -1480,8 +1502,8 @@ export default defineContentScript({
         applyImageEnhancementMode(msg.mode)
       }
 
-      if (isAiEnhancementStrengthMessage(msg)) {
-        applyAiEnhancementStrength(msg.strength)
+      if (isAiEnhancementModelMessage(msg)) {
+        applyAiEnhancementModel(msg.model)
       }
     })
 

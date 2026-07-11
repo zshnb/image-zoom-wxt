@@ -8,7 +8,7 @@ Click Image Zoom
 
 ## Short Description
 
-Hold a shortcut and click any web image to inspect it in place with wheel zoom, drag-to-pan, and local clarity mode.
+Hold a shortcut and click any web image to zoom, pan, and create a clearer enlarged version locally.
 
 ## Detailed Description
 
@@ -23,12 +23,12 @@ Main features:
 - Wheel zoom up to 10x with smooth scaling
 - Drag to pan around enlarged images naturally
 - Open the original image, copy its link, or save it from the viewer
-- Local clarity modes: strength-adjustable AI enhancement with Real-ESRGAN, sharp Lanczos scaling, or off
+- Choose AI clarity for better detail, quick sharpening for speed, or zoom only; AI mode also lets you favor speed or image quality
 - Custom trigger key: Shift, Alt, Ctrl, or Command
 - Enable or disable the extension per site
 - Works on dynamic pages and image buttons
 
-Click Image Zoom is intentionally simple: no automatic hover previews, no account required, and no remote image processing. Images stay in your browser and are not uploaded for clarity mode.
+Click Image Zoom is intentionally simple: no automatic hover previews, no account required, and no remote image processing. Images stay in your browser and are not uploaded when creating a clearer version.
 
 Use it when you want to inspect an image quickly without changing your browsing flow.
 
@@ -38,7 +38,7 @@ Use it when you want to inspect an image quickly without changing your browsing 
 
 ## 中文简短描述
 
-按住快捷键点击网页图片，在当前页放大查看；支持滚轮缩放、拖拽查看和本地清晰放大。
+按住快捷键点击网页图片，在当前页放大、拖动查看，还能在本地生成更清晰的大图。
 
 ## 中文详细描述
 
@@ -53,12 +53,12 @@ Use it when you want to inspect an image quickly without changing your browsing 
 - 支持滚轮缩放，最高可放大到 10 倍
 - 放大后可拖动图片查看局部细节
 - 可直接打开原图、复制图片链接或下载图片
-- 可选择 AI Real-ESRGAN、锐利 Lanczos 或关闭本地清晰算法，并可调节 AI 增强强度
+- 放大画质可选择智能高清、快速清晰或仅放大；使用智能高清时，还可以选择速度优先或画质优先
 - 可自定义触发按键：Shift、Alt、Ctrl 或 Command
 - 可按站点启用或禁用
 - 支持动态加载的网页图片和按钮内图片
 
-点击图片放大器刻意保持轻量：不自动悬停预览，不需要账号，也不把图片上传到远程服务处理。清晰模式在浏览器本地运行，图片保留在你的浏览器中。
+点击图片放大器刻意保持轻量：不自动悬停预览，不需要账号，也不会上传图片。高清图片直接在浏览器本地生成。
 
 适合在商品图片太小、文章截图看不清、社交媒体缩略图需要放大时使用。
 
@@ -71,5 +71,5 @@ Open the inspected page's DevTools console and filter for:
 ```
 
 Structured events include the overlay session and request IDs, runtime/model load time,
-selected backend, per-tile inference time, total upscale time, cache hits, cancellation,
+selected model and backend, per-tile inference time, total upscale time, cache hits, cancellation,
 fallback reasons, and cleanup.

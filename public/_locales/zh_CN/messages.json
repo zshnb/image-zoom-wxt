@@ -4,7 +4,7 @@
     "description": "扩展名称"
   },
   "extDescription": {
-    "message": "按住快捷键点击网页图片，在当前页放大查看；支持滚轮缩放、拖拽查看和本地清晰放大。",
+    "message": "按住快捷键点击网页图片，在当前页放大、拖动查看，还能在本地生成更清晰的大图。",
     "description": "扩展短描述"
   },
   "popupActivationKey": {
@@ -24,32 +24,32 @@
     "description": "快捷键保存失败状态"
   },
   "popupImageEnhancement": {
-    "message": "图片清晰算法",
-    "description": "清晰算法模式选择标签"
+    "message": "放大画质",
+    "description": "放大后图片画质选择标签"
   },
   "enhancementModeAi": {
-    "message": "AI · Real-ESRGAN",
+    "message": "智能高清（推荐）",
     "description": "AI 图片清晰模式"
   },
   "enhancementModeLanczos": {
-    "message": "锐利 · Lanczos",
+    "message": "快速清晰",
     "description": "Lanczos 图片清晰模式"
   },
   "enhancementModeOff": {
-    "message": "关闭",
+    "message": "仅放大",
     "description": "关闭图片清晰模式"
   },
-  "popupAiEnhancementStrength": {
-    "message": "AI 增强强度",
-    "description": "AI 图片增强强度标签"
+  "popupAiEnhancementModel": {
+    "message": "高清偏好",
+    "description": "智能高清处理偏好选择标签"
   },
-  "popupAiEnhancementNatural": {
-    "message": "自然",
-    "description": "AI 图片增强强度自然端标签"
+  "aiModelGeneralX4v3": {
+    "message": "速度优先（推荐）",
+    "description": "快速 Real-ESRGAN 模型选项"
   },
-  "popupAiEnhancementStrong": {
-    "message": "增强",
-    "description": "AI 图片增强强度增强端标签"
+  "aiModelX4plus": {
+    "message": "画质优先（较慢）",
+    "description": "高画质 Real-ESRGAN 模型选项"
   },
   "popupCurrentSite": {
     "message": "当前站点",
@@ -68,7 +68,7 @@
     "description": "当前站点不可用标签"
   },
   "viewerImageProcessing": {
-    "message": "正在本地增强图片",
+    "message": "正在生成高清图片",
     "description": "图片清晰算法处理中提示"
   },
   "viewerOpenImage": {

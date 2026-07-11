@@ -4,7 +4,7 @@
     "description": "Extension name"
   },
   "extDescription": {
-    "message": "Hold a shortcut and click any web image to inspect it in place with wheel zoom, drag-to-pan, and local clarity mode.",
+    "message": "Hold a shortcut and click any web image to zoom, pan, and create a clearer enlarged version locally.",
     "description": "Short extension description"
   },
   "popupActivationKey": {
@@ -24,32 +24,32 @@
     "description": "Shortcut save error state"
   },
   "popupImageEnhancement": {
-    "message": "Image clarity algorithm",
-    "description": "Image enhancement mode selector label"
+    "message": "Enlarged image quality",
+    "description": "Enlarged image quality selector label"
   },
   "enhancementModeAi": {
-    "message": "AI · Real-ESRGAN",
+    "message": "AI clarity (Recommended)",
     "description": "AI image enhancement mode"
   },
   "enhancementModeLanczos": {
-    "message": "Sharp · Lanczos",
+    "message": "Quick sharpening",
     "description": "Lanczos image enhancement mode"
   },
   "enhancementModeOff": {
-    "message": "Off",
+    "message": "Zoom only",
     "description": "Disabled image enhancement mode"
   },
-  "popupAiEnhancementStrength": {
-    "message": "AI enhancement strength",
-    "description": "AI image enhancement strength label"
+  "popupAiEnhancementModel": {
+    "message": "Processing preference",
+    "description": "AI clarity processing preference label"
   },
-  "popupAiEnhancementNatural": {
-    "message": "Natural",
-    "description": "Natural end of the AI enhancement strength range"
+  "aiModelGeneralX4v3": {
+    "message": "Faster (Recommended)",
+    "description": "Fast Real-ESRGAN model option"
   },
-  "popupAiEnhancementStrong": {
-    "message": "Enhanced",
-    "description": "Enhanced end of the AI enhancement strength range"
+  "aiModelX4plus": {
+    "message": "Better quality (Slower)",
+    "description": "High quality Real-ESRGAN model option"
   },
   "popupCurrentSite": {
     "message": "Current site",
@@ -68,7 +68,7 @@
     "description": "Current site unavailable label"
   },
   "viewerImageProcessing": {
-    "message": "Enhancing image locally",
+    "message": "Creating a clearer image",
     "description": "Image enhancement processing label"
   },
   "viewerOpenImage": {
