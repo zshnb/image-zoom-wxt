@@ -693,6 +693,7 @@ export default defineContentScript({
       let upscaleTimer = 0
       let upscaleRequestId = 0
       let upscaleAbortController: AbortController | null = null
+      let inFlightUpscaleKey = ''
       let renderedUpscaleKey = ''
       let sourceReady = false
       let sourceFailed = false
@@ -899,6 +900,7 @@ export default defineContentScript({
             reason: 'viewer_state_changed',
           })
         }
+        inFlightUpscaleKey = ''
         upscaleRequestId += 1
         setLoading(false)
         restoreOriginalSource()
@@ -979,6 +981,8 @@ export default defineContentScript({
           return
         }
 
+        if (inFlightUpscaleKey === target.key) return
+
         const requestId = upscaleRequestId + 1
         upscaleRequestId = requestId
         const requestMode = activeEnhancementMode
@@ -999,6 +1003,7 @@ export default defineContentScript({
         upscaleAbortController?.abort()
         const abortController = new AbortController()
         upscaleAbortController = abortController
+        inFlightUpscaleKey = target.key
         let objectUrl: string | null = null
         try {
           setLoading(true)
@@ -1070,6 +1075,7 @@ export default defineContentScript({
         } finally {
           if (upscaleAbortController === abortController) {
             upscaleAbortController = null
+            inFlightUpscaleKey = ''
           }
           if (!overlayClosed && requestId === upscaleRequestId) {
             setLoading(false)
