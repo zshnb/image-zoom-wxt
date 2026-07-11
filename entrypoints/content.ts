@@ -1454,19 +1454,34 @@ export default defineContentScript({
       return null
     }
 
-    function getClickImageTarget(target: HTMLElement): HTMLElement | null {
-      if (target instanceof HTMLImageElement && target.classList.contains(HOVERABLE_CLASS)) {
-        return target
+    function getClickImageTarget(event: MouseEvent): HTMLElement | null {
+      const path = event.composedPath().filter(
+        (target): target is HTMLElement => target instanceof HTMLElement,
+      )
+      if (path.some((target) => target.closest(`#${OVERLAY_ID}`))) return null
+
+      for (const target of path) {
+        if (target instanceof HTMLImageElement && isVisibleImage(target)) return target
       }
 
-      const backgroundTarget = getBackgroundImageTarget(target)
-      if (backgroundTarget) return backgroundTarget
+      for (const target of path) {
+        const backgroundTarget = getBackgroundImageTarget(target)
+        if (backgroundTarget) return backgroundTarget
+      }
 
-      const container = target.closest<HTMLElement>(IMAGE_TRIGGER_CONTAINER_SELECTOR)
-      if (!container) return null
+      const containers = new Set<HTMLElement>()
+      path.forEach((target) => {
+        const container = target.closest<HTMLElement>(IMAGE_TRIGGER_CONTAINER_SELECTOR)
+        if (container) containers.add(container)
+      })
 
-      const images = container.querySelectorAll<HTMLImageElement>(`img.${HOVERABLE_CLASS}`)
-      return images.length === 1 ? images[0] : null
+      for (const container of containers) {
+        const images = [...container.querySelectorAll<HTMLImageElement>('img')]
+          .filter(isVisibleImage)
+        if (images.length === 1) return images[0]
+      }
+
+      return null
     }
 
     function handleClick(e: MouseEvent): void {
@@ -1488,9 +1503,7 @@ export default defineContentScript({
         return
       }
       if (!shortcutPressed) return
-      const target = e.target
-      if (!(target instanceof HTMLElement)) return
-      const imageTarget = getClickImageTarget(target)
+      const imageTarget = getClickImageTarget(e)
       if (!imageTarget) return
       e.preventDefault()
       e.stopPropagation()
@@ -1516,7 +1529,11 @@ export default defineContentScript({
       if (el.closest(`#${OVERLAY_ID}`)) return
       if (isVisibleImage(el)) {
         el.classList.add(HOVERABLE_CLASS)
-      } else if (el instanceof HTMLImageElement && !el.complete) {
+        return
+      }
+
+      el.classList.remove(HOVERABLE_CLASS)
+      if (el instanceof HTMLImageElement && !el.complete) {
         el.addEventListener('load', () => {
           if (enabled && isVisibleImage(el)) el.classList.add(HOVERABLE_CLASS)
         }, { once: true })
@@ -1538,6 +1555,26 @@ export default defineContentScript({
     const observer = new MutationObserver((mutations) => {
       if (!enabled) return
       for (const mutation of mutations) {
+        if (mutation.type === 'attributes') {
+          const target = mutation.target
+          if (target instanceof HTMLImageElement) {
+            addHoverable(target)
+          } else if (target instanceof HTMLSourceElement) {
+            target.closest('picture')?.querySelectorAll<HTMLImageElement>('img').forEach(addHoverable)
+          } else if (
+            target instanceof HTMLElement
+            && mutation.attributeName === 'style'
+            && (
+              target.style.background
+              || target.style.backgroundImage
+              || target.classList.contains(HOVERABLE_CLASS)
+            )
+          ) {
+            addHoverable(target)
+          }
+          continue
+        }
+
         mutation.addedNodes.forEach((node) => {
           if (node instanceof HTMLElement) {
             if (node.matches('img, [style*="background"]')) {
@@ -1549,7 +1586,12 @@ export default defineContentScript({
       }
     })
 
-    observer.observe(document.body, { childList: true, subtree: true })
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src', 'srcset', 'style'],
+    })
 
     // --- Global click listener ---
     document.addEventListener('click', handleClick, true)
