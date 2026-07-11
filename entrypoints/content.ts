@@ -46,6 +46,7 @@ type FetchImageResponse =
   | { ok: false; error: string }
 type ResizeWeight = { indices: number[]; weights: number[] }
 type ImageCandidate = { url: string; score: number }
+type ImageSources = { urls: string[]; upgradeCount: number }
 type ZoomOverlayElement = HTMLDivElement & {
   cleanupImageZoom?: () => void
   setImageEnhancementMode?: (mode: ImageEnhancementMode) => void
@@ -270,31 +271,39 @@ function addSrcsetCandidates(
 ): void {
   if (!srcset) return
 
-  srcset.split(',').forEach((rawCandidate) => {
-    const parts = rawCandidate.trim().split(/\s+/)
-    if (parts.length < 1) return
+  let position = 0
+  while (position < srcset.length) {
+    while (position < srcset.length && /[\s,]/.test(srcset[position])) position += 1
+    if (position >= srcset.length) break
 
-    addImageCandidate(
-      candidates,
-      parts[0],
-      getSrcsetDescriptorScore(parts[1], baseWidth),
-    )
-  })
-}
-
-function pickBestImageCandidate(candidates: ImageCandidate[]): string | null {
-  let best: ImageCandidate | null = null
-
-  for (const candidate of candidates) {
-    if (!best || candidate.score > best.score) {
-      best = candidate
+    const urlStart = position
+    while (position < srcset.length && !/\s/.test(srcset[position])) position += 1
+    let url = srcset.slice(urlStart, position)
+    let hasTrailingComma = false
+    while (url.endsWith(',')) {
+      url = url.slice(0, -1)
+      hasTrailingComma = true
     }
-  }
 
-  return best?.url ?? null
+    const descriptors: string[] = []
+    if (!hasTrailingComma) {
+      while (position < srcset.length && /\s/.test(srcset[position])) position += 1
+      const descriptorStart = position
+      while (position < srcset.length && srcset[position] !== ',') position += 1
+      descriptors.push(...srcset.slice(descriptorStart, position).trim().split(/\s+/))
+    }
+
+    if (position < srcset.length && srcset[position] === ',') position += 1
+    addImageCandidate(candidates, url, getSrcsetDescriptorScore(descriptors[0], baseWidth))
+  }
 }
 
-function getBestImageElementUrl(image: HTMLImageElement): string | null {
+function addUniqueImageUrl(urls: string[], value: string | null | undefined): void {
+  const url = resolveImageUrl(value)
+  if (url && !urls.includes(url)) urls.push(url)
+}
+
+function getImageElementSources(image: HTMLImageElement): ImageSources | null {
   const candidates: ImageCandidate[] = []
   const baseWidth = image.naturalWidth || image.width || 1
   const picture = image.parentElement instanceof HTMLPictureElement ? image.parentElement : null
@@ -306,7 +315,6 @@ function getBestImageElementUrl(image: HTMLImageElement): string | null {
 
   addSrcsetCandidates(candidates, image.getAttribute('srcset'), baseWidth)
   addSrcsetCandidates(candidates, image.getAttribute('data-srcset'), baseWidth)
-  addImageCandidate(candidates, image.currentSrc, baseWidth)
 
   IMAGE_DATA_ATTRIBUTES.forEach((attribute, index) => {
     addImageCandidate(
@@ -316,10 +324,16 @@ function getBestImageElementUrl(image: HTMLImageElement): string | null {
     )
   })
 
-  addImageCandidate(candidates, image.getAttribute('src'), 1)
-  addImageCandidate(candidates, image.src, 1)
+  candidates.sort((left, right) => right.score - left.score)
 
-  return pickBestImageCandidate(candidates)
+  const urls: string[] = []
+  addUniqueImageUrl(urls, image.currentSrc)
+  candidates.forEach((candidate) => addUniqueImageUrl(urls, candidate.url))
+  const upgradeCount = Math.max(0, urls.length - 1)
+  addUniqueImageUrl(urls, image.getAttribute('src'))
+  addUniqueImageUrl(urls, image.src)
+
+  return urls.length > 0 ? { urls, upgradeCount } : null
 }
 
 function getBackgroundImageUrl(el: HTMLElement): string | null {
@@ -636,9 +650,11 @@ export default defineContentScript({
     }
 
     // --- Overlay ---
-    function openOverlay(src: string, alt: string): void {
+    function openOverlay(sources: ImageSources, alt: string): void {
       if (document.getElementById(OVERLAY_ID)) return
 
+      const sourceUrls = sources.urls
+      let src = sourceUrls[0]
       const sessionId = crypto.randomUUID()
       const enhancementContext: EnhancementLogContext = { sessionId }
       const overlay = document.createElement('div') as ZoomOverlayElement
@@ -697,6 +713,10 @@ export default defineContentScript({
       let renderedUpscaleKey = ''
       let sourceReady = false
       let sourceFailed = false
+      let displayReady = false
+      let activeSourceIndex = 0
+      let sourceGeneration = 0
+      let upgradeAttempted = false
       let aiUpscaleActivated = false
       let overlayClosed = false
       let statusTimer = 0
@@ -723,11 +743,13 @@ export default defineContentScript({
         }
         if (sourceRecoveryPromise) return sourceRecoveryPromise
 
+        const recoveryGeneration = sourceGeneration
+        const recoverySrc = src
         const startedAt = performance.now()
         logImageEnhancement('warn', 'source_pixels_unavailable', context, {
           sourceUrlOrigin: (() => {
             try {
-              return new URL(src, location.href).origin
+              return new URL(recoverySrc, location.href).origin
             } catch {
               return 'invalid'
             }
@@ -738,8 +760,9 @@ export default defineContentScript({
 
         sourceRecoveryPromise = browser.runtime.sendMessage({
           type: 'FETCH_IMAGE_FOR_ENHANCEMENT',
-          url: src,
+          url: recoverySrc,
         }).then(async (response: unknown) => {
+          if (recoveryGeneration !== sourceGeneration || recoverySrc !== src) return null
           if (!isFetchImageResponse(response)) {
             logImageEnhancement('warn', 'source_fetch_recovery_failed', context, {
               reason: 'invalid_response',
@@ -760,7 +783,11 @@ export default defineContentScript({
           }
 
           const recoveredImage = await loadDataImage(response.dataUrl, signal)
-          if (overlayClosed) return null
+          if (
+            overlayClosed
+            || recoveryGeneration !== sourceGeneration
+            || recoverySrc !== src
+          ) return null
 
           sourceImage = recoveredImage
           sourceReady = true
@@ -779,11 +806,24 @@ export default defineContentScript({
               durationMs: Math.round(performance.now() - startedAt),
             })
           }
-          sourceRecoveryPromise = null
+          if (recoveryGeneration === sourceGeneration) sourceRecoveryPromise = null
           throw error
         })
 
         return sourceRecoveryPromise
+      }
+
+      const recoverCurrentSource = (): void => {
+        void recoverSourceImage(enhancementContext).then((recoveredImage) => {
+          if (!recoveredImage || overlayClosed) return
+          scheduleUpscale()
+        }).catch((error: unknown) => {
+          if (!isEnhancementAbort(error)) {
+            logImageEnhancement('warn', 'source_recovery_unavailable', enhancementContext, {
+              errorMessage: error instanceof Error ? error.message : String(error),
+            })
+          }
+        })
       }
 
       const createToolbarButton = (
@@ -1150,42 +1190,116 @@ export default defineContentScript({
         renderTransform()
       }
 
-      sourceImage.decoding = 'async'
-      try {
-        const sourceUrl = new URL(src, location.href)
-        if (sourceUrl.origin !== location.origin && sourceUrl.protocol !== 'data:' && sourceUrl.protocol !== 'blob:') {
-          sourceImage.crossOrigin = 'anonymous'
+      const activateSource = (index: number): void => {
+        if (index < 0 || index >= sourceUrls.length || overlayClosed) return
+        if (sourceGeneration > 0) cancelUpscale()
+
+        activeSourceIndex = index
+        src = sourceUrls[index]
+        displayReady = false
+        sourceReady = false
+        sourceFailed = false
+        sourceRecoveryPromise = null
+        sourceGeneration += 1
+        const generation = sourceGeneration
+
+        const nextSourceImage = new Image()
+        nextSourceImage.decoding = 'async'
+        try {
+          const sourceUrl = new URL(src, location.href)
+          if (
+            sourceUrl.origin !== location.origin
+            && sourceUrl.protocol !== 'data:'
+            && sourceUrl.protocol !== 'blob:'
+          ) {
+            nextSourceImage.crossOrigin = 'anonymous'
+          }
+        } catch {
+          sourceFailed = true
         }
-      } catch {
-        sourceFailed = true
+
+        nextSourceImage.addEventListener('load', () => {
+          if (generation !== sourceGeneration || overlayClosed) return
+          sourceReady = true
+          sourceFailed = false
+          scheduleUpscale()
+        }, { once: true })
+        nextSourceImage.addEventListener('error', () => {
+          if (generation !== sourceGeneration || overlayClosed) return
+          sourceFailed = true
+          sourceReady = false
+          if (displayReady) recoverCurrentSource()
+        }, { once: true })
+        sourceImage = nextSourceImage
+        sourceImage.src = src
+        img.src = src
       }
-      sourceImage.addEventListener('load', () => {
-        sourceReady = true
-        scheduleUpscale()
-      }, { once: true })
-      sourceImage.addEventListener('error', () => {
+
+      const tryUpgradeSource = async (): Promise<void> => {
+        const initialGeneration = sourceGeneration
+        const initialWidth = img.naturalWidth
+        const initialHeight = img.naturalHeight
+        const lastUpgradeIndex = Math.min(sources.upgradeCount, sourceUrls.length - 1)
+
+        for (let index = 1; index <= lastUpgradeIndex; index += 1) {
+          const probe = new Image()
+          probe.decoding = 'async'
+          const loaded = await new Promise<boolean>((resolve) => {
+            probe.addEventListener('load', () => resolve(true), { once: true })
+            probe.addEventListener('error', () => resolve(false), { once: true })
+            probe.src = sourceUrls[index]
+          })
+
+          if (overlayClosed || initialGeneration !== sourceGeneration) return
+          if (!loaded) {
+            logImageEnhancement('debug', 'source_candidate_failed', enhancementContext, {
+              candidateIndex: index,
+              phase: 'upgrade_probe',
+            })
+            continue
+          }
+          if (probe.naturalWidth <= initialWidth && probe.naturalHeight <= initialHeight) continue
+
+          logImageEnhancement('info', 'source_candidate_upgraded', enhancementContext, {
+            candidateIndex: index,
+            fromWidth: initialWidth,
+            fromHeight: initialHeight,
+            toWidth: probe.naturalWidth,
+            toHeight: probe.naturalHeight,
+          })
+          activateSource(index)
+          return
+        }
+      }
+
+      img.addEventListener('load', () => {
+        displayReady = true
+        requestAnimationFrame(lockBaseSize)
+        if (sourceFailed) recoverCurrentSource()
+        if (!upgradeAttempted && activeSourceIndex === 0 && sources.upgradeCount > 0) {
+          upgradeAttempted = true
+          void tryUpgradeSource()
+        }
+      })
+      img.addEventListener('error', () => {
+        displayReady = false
+        const nextIndex = activeSourceIndex + 1
+        logImageEnhancement('warn', 'source_candidate_failed', enhancementContext, {
+          candidateIndex: activeSourceIndex,
+          remainingCandidates: Math.max(0, sourceUrls.length - nextIndex),
+          phase: 'viewer_load',
+        })
+        if (nextIndex < sourceUrls.length) {
+          activateSource(nextIndex)
+          return
+        }
         sourceFailed = true
         sourceReady = false
         logImageEnhancement('warn', 'source_direct_load_failed', enhancementContext, {
-          recovery: 'background_fetch',
+          attemptedCandidates: sourceUrls.length,
         })
-        void recoverSourceImage(enhancementContext).then((recoveredImage) => {
-          if (!recoveredImage || overlayClosed) return
-          scheduleUpscale()
-        }).catch((error: unknown) => {
-          if (!isEnhancementAbort(error)) {
-            logImageEnhancement('warn', 'source_recovery_unavailable', enhancementContext, {
-              errorMessage: error instanceof Error ? error.message : String(error),
-            })
-          }
-        })
-      }, { once: true })
-      sourceImage.src = src
-
-      img.addEventListener('load', () => {
-        requestAnimationFrame(lockBaseSize)
-      }, { once: true })
-      img.src = src
+      })
+      activateSource(0)
 
       renderTransform()
 
@@ -1316,9 +1430,10 @@ export default defineContentScript({
     }
 
     // --- Image click handler ---
-    function getImageSrc(el: HTMLElement): string | null {
-      if (el instanceof HTMLImageElement) return getBestImageElementUrl(el)
-      return getBackgroundImageUrl(el)
+    function getImageSources(el: HTMLElement): ImageSources | null {
+      if (el instanceof HTMLImageElement) return getImageElementSources(el)
+      const url = getBackgroundImageUrl(el)
+      return url ? { urls: [url], upgradeCount: 0 } : null
     }
 
     function getImageAlt(el: HTMLElement): string {
@@ -1379,8 +1494,8 @@ export default defineContentScript({
       if (!imageTarget) return
       e.preventDefault()
       e.stopPropagation()
-      const src = getImageSrc(imageTarget)
-      if (src) openOverlay(src, getImageAlt(imageTarget))
+      const sources = getImageSources(imageTarget)
+      if (sources) openOverlay(sources, getImageAlt(imageTarget))
     }
 
     // --- Hover class management ---
