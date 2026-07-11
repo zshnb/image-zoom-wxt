@@ -12,6 +12,8 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm compile && pnpm test",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "@wxt-dev/module-react": "^1.1.5",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
     "wxt": "^0.20.18"
   }
 }
