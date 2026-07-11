@@ -1,4 +1,8 @@
 import type { AiEnhancementModel } from '@/utils/storage'
+import {
+  isRunnerResponse,
+  type RunnerModelInput,
+} from '@/utils/runnerProtocol'
 
 export type EnhancementLogContext = {
   sessionId: string
@@ -8,22 +12,18 @@ export type EnhancementLogContext = {
 type Accelerator = 'webgpu' | 'wasm'
 type EnhancementLogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EnhancementLogData = Record<string, unknown>
-type ModelInput = Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer>
+type ModelInput = RunnerModelInput
 type TileResult = {
   backend: Accelerator
   rgba: Uint8ClampedArray<ArrayBuffer>
 }
-type RunnerResponse =
-  | { type: 'READY' }
-  | { type: 'RUN_TILE_RESULT'; id: number; backend: Accelerator; rgba: ArrayBuffer }
-  | { type: 'RUN_TILE_ERROR'; id: number; errorName?: string; errorMessage: string }
 type PendingRequest = {
   resolve: (result: TileResult) => void
   reject: (error: Error) => void
   cleanup: () => void
 }
 type RunnerClient = {
-  iframe: HTMLIFrameElement
+  host: HTMLDivElement
   port: MessagePort
   pending: Map<number, PendingRequest>
   nextId: number
@@ -94,30 +94,52 @@ function throwIfAborted(signal: AbortSignal): void {
 
 async function createRunner(context: EnhancementLogContext): Promise<RunnerClient> {
   const startedAt = performance.now()
-  const iframeUrl = browser.runtime.getURL('/litert-runner.html')
+  const issueResponse: unknown = await browser.runtime.sendMessage({
+    type: 'ISSUE_LITERT_RUNNER_SESSION',
+  })
+  if (
+    typeof issueResponse !== 'object'
+    || issueResponse === null
+    || (issueResponse as Record<string, unknown>).ok !== true
+    || typeof (issueResponse as Record<string, unknown>).token !== 'string'
+  ) throw new Error('LiteRT runner session could not be issued')
+  const token = (issueResponse as { token: string }).token
+  const iframeUrl = new URL(browser.runtime.getURL('/litert-runner.html'))
+  iframeUrl.hash = `token=${encodeURIComponent(token)}`
+  const host = document.createElement('div')
+  host.hidden = true
+  host.setAttribute('aria-hidden', 'true')
+  host.style.display = 'none'
+  const shadow = host.attachShadow({ mode: 'closed' })
   const iframe = document.createElement('iframe')
-  iframe.src = iframeUrl
+  iframe.src = iframeUrl.href
   iframe.hidden = true
   iframe.setAttribute('aria-hidden', 'true')
   iframe.setAttribute('tabindex', '-1')
   iframe.style.display = 'none'
+  shadow.appendChild(iframe)
 
-  logImageEnhancement('info', 'runner_create_start', context, { iframeUrl })
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error('LiteRT runner load timed out')), 10_000)
-    iframe.addEventListener('load', () => {
-      window.clearTimeout(timeout)
-      resolve()
-    }, { once: true })
-    iframe.addEventListener('error', () => {
-      window.clearTimeout(timeout)
-      reject(new Error('LiteRT runner failed to load'))
-    }, { once: true })
-    document.documentElement.appendChild(iframe)
-  })
+  logImageEnhancement('info', 'runner_create_start', context)
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error('LiteRT runner load timed out')), 10_000)
+      iframe.addEventListener('load', () => {
+        window.clearTimeout(timeout)
+        resolve()
+      }, { once: true })
+      iframe.addEventListener('error', () => {
+        window.clearTimeout(timeout)
+        reject(new Error('LiteRT runner failed to load'))
+      }, { once: true })
+      document.documentElement.appendChild(host)
+    })
+  } catch (error) {
+    host.remove()
+    throw error
+  }
 
   if (!iframe.contentWindow) {
-    iframe.remove()
+    host.remove()
     throw new Error('LiteRT runner window is unavailable')
   }
 
@@ -130,8 +152,9 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
     readyReject = reject
   })
 
-  channel.port1.addEventListener('message', (event: MessageEvent<RunnerResponse>) => {
+  channel.port1.addEventListener('message', (event: MessageEvent<unknown>) => {
     const response = event.data
+    if (!isRunnerResponse(response)) return
     if (response.type === 'READY') {
       readyResolve?.()
       return
@@ -165,8 +188,8 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
   })
   channel.port1.start()
   iframe.contentWindow.postMessage(
-    { type: 'IMAGE_ZOOM_LITERT_CONNECT' },
-    new URL(iframeUrl).origin,
+    { type: 'IMAGE_ZOOM_LITERT_CONNECT', token },
+    iframeUrl.origin,
     [channel.port2],
   )
 
@@ -178,7 +201,7 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
     await ready
   } catch (error) {
     channel.port1.close()
-    iframe.remove()
+    host.remove()
     throw error
   } finally {
     window.clearTimeout(readyTimeout)
@@ -187,7 +210,7 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
   logImageEnhancement('info', 'runner_ready', context, {
     durationMs: Math.round(performance.now() - startedAt),
   })
-  return { iframe, port: channel.port1, pending, nextId: 1 }
+  return { host, port: channel.port1, pending, nextId: 1 }
 }
 
 async function getRunner(context: EnhancementLogContext): Promise<RunnerClient> {
@@ -463,7 +486,7 @@ export function disposeRealEsrgan(context: EnhancementLogContext): void {
     runner.pending.clear()
     runner.port.postMessage({ type: 'DISPOSE' })
     runner.port.close()
-    runner.iframe.remove()
+    runner.host.remove()
     logImageEnhancement('info', 'runner_disposed', context)
   }).catch((error: unknown) => {
     logImageEnhancement('warn', 'runner_dispose_failed', context, errorDetails(error))

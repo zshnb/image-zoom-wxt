@@ -1,3 +1,13 @@
+import {
+  fetchBoundedImage,
+  resolveImageFetchPolicy,
+} from '@/utils/imageFetchPolicy'
+import {
+  isClaimRunnerSessionMessage,
+  isIssueRunnerSessionMessage,
+  RunnerSessionStore,
+} from '@/utils/runnerProtocol'
+
 type DownloadImageMessage = {
   type: 'DOWNLOAD_IMAGE'
   url: string
@@ -22,6 +32,7 @@ type FetchImageResponse =
 const MAX_ENHANCEMENT_IMAGE_BYTES = 12 * 1024 * 1024
 const BASE64_CHUNK_SIZE = 32 * 1024
 const ENHANCEMENT_LOG_PREFIX = '[ImageZoom][enhancement]'
+const runnerSessions = new RunnerSessionStore()
 
 function isDownloadImageMessage(msg: unknown): msg is DownloadImageMessage {
   if (typeof msg !== 'object' || msg === null) return false
@@ -40,48 +51,6 @@ function isFetchImageMessage(msg: unknown): msg is FetchImageMessage {
     candidate.type === 'FETCH_IMAGE_FOR_ENHANCEMENT'
     && typeof candidate.url === 'string'
   )
-}
-
-function isPrivateHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase()
-  if (
-    normalized === 'localhost'
-    || normalized.endsWith('.localhost')
-    || normalized.endsWith('.local')
-    || normalized === '[::1]'
-    || normalized.startsWith('[fc')
-    || normalized.startsWith('[fd')
-    || normalized.startsWith('[fe8')
-    || normalized.startsWith('[fe9')
-    || normalized.startsWith('[fea')
-    || normalized.startsWith('[feb')
-  ) return true
-
-  const parts = normalized.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false
-  const [first, second] = parts
-  return (
-    first === 10
-    || first === 127
-    || (first === 169 && second === 254)
-    || (first === 172 && second >= 16 && second <= 31)
-    || (first === 192 && second === 168)
-  )
-}
-
-function getFetchableImageUrl(value: string): URL | null {
-  try {
-    const url = new URL(value)
-    if (
-      (url.protocol !== 'http:' && url.protocol !== 'https:')
-      || url.username
-      || url.password
-      || isPrivateHostname(url.hostname)
-    ) return null
-    return url
-  } catch {
-    return null
-  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -106,59 +75,43 @@ function logEnhancementFetch(
   })
 }
 
-async function fetchImageForEnhancement(urlValue: string): Promise<FetchImageResponse> {
-  const url = getFetchableImageUrl(urlValue)
-  if (!url) return { ok: false, error: 'unsupported_or_private_url' }
+async function fetchImageForEnhancement(
+  urlValue: string,
+  senderPageUrl: string,
+): Promise<FetchImageResponse> {
+  const policy = resolveImageFetchPolicy(urlValue, senderPageUrl)
+  if (!policy.ok) return policy
 
   const startedAt = performance.now()
-  logEnhancementFetch('info', 'source_fetch_start', { hostname: url.hostname })
+  logEnhancementFetch('info', 'source_fetch_start', { hostname: policy.url.hostname })
 
-  try {
-    const response = await fetch(url, {
-      cache: 'force-cache',
-      credentials: 'include',
-      referrerPolicy: 'no-referrer',
-    })
-    if (!response.ok) return { ok: false, error: `http_${response.status}` }
-
-    const finalUrl = getFetchableImageUrl(response.url)
-    if (!finalUrl) return { ok: false, error: 'unsafe_redirect_target' }
-
-    const contentLength = Number(response.headers.get('content-length'))
-    if (Number.isFinite(contentLength) && contentLength > MAX_ENHANCEMENT_IMAGE_BYTES) {
-      return { ok: false, error: 'image_too_large' }
-    }
-
-    const mimeType = response.headers.get('content-type')?.split(';')[0].trim() || ''
-    if (!mimeType.startsWith('image/')) return { ok: false, error: 'not_an_image' }
-
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    if (bytes.byteLength > MAX_ENHANCEMENT_IMAGE_BYTES) {
-      return { ok: false, error: 'image_too_large' }
-    }
-
-    const dataUrl = `data:${mimeType};base64,${bytesToBase64(bytes)}`
-    logEnhancementFetch('info', 'source_fetch_complete', {
-      hostname: finalUrl.hostname,
-      bytes: bytes.byteLength,
-      mimeType,
-      durationMs: Math.round(performance.now() - startedAt),
-    })
-    return {
-      ok: true,
-      dataUrl,
-      bytes: bytes.byteLength,
-      mimeType,
-      finalUrl: finalUrl.href,
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+  const result = await fetchBoundedImage(
+    policy.url,
+    policy.credentials,
+    MAX_ENHANCEMENT_IMAGE_BYTES,
+  )
+  if (!result.ok) {
     logEnhancementFetch('warn', 'source_fetch_failed', {
-      hostname: url.hostname,
+      hostname: policy.url.hostname,
       durationMs: Math.round(performance.now() - startedAt),
-      errorMessage,
+      error: result.error,
     })
-    return { ok: false, error: errorMessage }
+    return result
+  }
+
+  const dataUrl = `data:${result.mimeType};base64,${bytesToBase64(result.bytes)}`
+  logEnhancementFetch('info', 'source_fetch_complete', {
+    hostname: policy.url.hostname,
+    bytes: result.bytes.byteLength,
+    mimeType: result.mimeType,
+    durationMs: Math.round(performance.now() - startedAt),
+  })
+  return {
+    ok: true,
+    dataUrl,
+    bytes: result.bytes.byteLength,
+    mimeType: result.mimeType,
+    finalUrl: policy.url.href,
   }
 }
 
@@ -190,13 +143,32 @@ async function downloadImage(msg: DownloadImageMessage): Promise<{ ok: boolean }
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
-    if (isFetchImageMessage(msg)) {
+    if (isIssueRunnerSessionMessage(msg)) {
       if (sender.tab?.id === undefined) {
         sendResponse({ ok: false, error: 'invalid_sender' })
         return false
       }
+      sendResponse({ ok: true, token: runnerSessions.issue(sender.tab.id) })
+      return false
+    }
 
-      void fetchImageForEnhancement(msg.url).then(sendResponse)
+    if (isClaimRunnerSessionMessage(msg)) {
+      if (sender.tab?.id === undefined) {
+        sendResponse({ ok: false, error: 'invalid_sender' })
+        return false
+      }
+      const claimed = runnerSessions.claim(msg.token, sender.tab.id)
+      sendResponse(claimed ? { ok: true } : { ok: false, error: 'invalid_session' })
+      return false
+    }
+
+    if (isFetchImageMessage(msg)) {
+      if (sender.tab?.id === undefined || typeof sender.tab.url !== 'string') {
+        sendResponse({ ok: false, error: 'invalid_sender' })
+        return false
+      }
+
+      void fetchImageForEnhancement(msg.url, sender.tab.url).then(sendResponse)
       return true
     }
 
