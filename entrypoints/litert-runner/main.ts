@@ -9,22 +9,16 @@ import {
   type CompiledModel,
 } from '@litertjs/core'
 import type { AiEnhancementModel } from '@/utils/storage'
+import {
+  getRealEsrganModelConfig,
+  runWithTileBudget,
+  type RealEsrganModelConfig,
+} from '@/utils/realEsrganModels'
 
 type LogContext = { sessionId: string; requestId?: number }
 type LogData = Record<string, unknown>
-type ModelDtype = 'float32' | 'uint8'
 type ModelInput = Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer>
 type RuntimeState = { jspi: boolean }
-type ModelConfig = {
-  url:
-    | '/models/real_esrgan_general_x4v3.tflite'
-    | '/models/real_esrgan_x4plus_w8a8.tflite'
-  inputSize: number
-  outputSize: number
-  dtype: ModelDtype
-  requiresJspi: boolean
-  allowWasm: boolean
-}
 type ModelState = {
   backend: Accelerator
   modelName: AiEnhancementModel
@@ -36,30 +30,12 @@ type RunTileRequest = {
   input: ModelInput
   model: AiEnhancementModel
   context: LogContext
+  tileCount: number
   tile: LogData
 }
 type CancelRequest = { type: 'CANCEL_TILE'; id: number }
 type DisposeRequest = { type: 'DISPOSE' }
 type RunnerRequest = RunTileRequest | CancelRequest | DisposeRequest
-
-const MODEL_CONFIGS: Record<AiEnhancementModel, ModelConfig> = {
-  'general-x4v3': {
-    url: '/models/real_esrgan_general_x4v3.tflite',
-    inputSize: 128,
-    outputSize: 512,
-    dtype: 'float32',
-    requiresJspi: false,
-    allowWasm: true,
-  },
-  x4plus: {
-    url: '/models/real_esrgan_x4plus_w8a8.tflite',
-    inputSize: 128,
-    outputSize: 512,
-    dtype: 'uint8',
-    requiresJspi: true,
-    allowWasm: false,
-  },
-}
 const LOG_PREFIX = '[ImageZoom][enhancement]'
 
 let runtimePromise: Promise<RuntimeState> | null = null
@@ -146,7 +122,7 @@ async function loadModelBytes(
   context: LogContext,
 ): Promise<Uint8Array> {
   const startedAt = performance.now()
-  const modelUrl = browser.runtime.getURL(MODEL_CONFIGS[modelName].url)
+  const modelUrl = browser.runtime.getURL(getRealEsrganModelConfig(modelName).url)
   log('info', 'model_fetch_start', context, { model: modelName, modelUrl })
 
   try {
@@ -169,7 +145,7 @@ async function loadModelBytes(
 }
 
 function validateModel(model: CompiledModel, modelName: AiEnhancementModel): void {
-  const config = MODEL_CONFIGS[modelName]
+  const config = getRealEsrganModelConfig(modelName)
   const [input] = model.getInputDetails()
   const [output] = model.getOutputDetails()
   const inputShape = input ? Array.from(input.shape) : []
@@ -194,7 +170,7 @@ async function compileModel(
   context: LogContext,
 ): Promise<ModelState> {
   const startedAt = performance.now()
-  const config = MODEL_CONFIGS[modelName]
+  const config = getRealEsrganModelConfig(modelName)
   const runtime = await ensureRuntime(context)
   if (config.requiresJspi && !runtime.jspi) {
     throw new Error(`Real-ESRGAN ${modelName} requires LiteRT JSPI support`)
@@ -246,7 +222,7 @@ async function getModel(
 
   compilingModel = modelName
   modelPromise = (async () => {
-    const config = MODEL_CONFIGS[modelName]
+    const config = getRealEsrganModelConfig(modelName)
     const runtime = await ensureRuntime(context)
     if (config.requiresJspi && !runtime.jspi) {
       throw new Error(`Real-ESRGAN ${modelName} requires LiteRT JSPI support`)
@@ -315,7 +291,7 @@ function releaseModel(state: ModelState): void {
 
 function toRgba(
   output: Float32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike>,
-  config: ModelConfig,
+  config: RealEsrganModelConfig,
 ): Uint8ClampedArray<ArrayBuffer> {
   const pixelCount = config.outputSize * config.outputSize
   if (output.length !== pixelCount * 3) {
@@ -349,7 +325,7 @@ async function runWithModel(
   request: RunTileRequest,
 ): Promise<Uint8ClampedArray<ArrayBuffer>> {
   const startedAt = performance.now()
-  const config = MODEL_CONFIGS[request.model]
+  const config = getRealEsrganModelConfig(request.model)
   const inputTensor = new Tensor(
     request.input,
     [1, config.inputSize, config.inputSize, 3],
@@ -394,10 +370,18 @@ async function runTile(
 ): Promise<{ backend: Accelerator; rgba: Uint8ClampedArray<ArrayBuffer> }> {
   let state = await getModel(request.model, request.context)
   try {
-    return { backend: state.backend, rgba: await runWithModel(state, request) }
+    return {
+      backend: state.backend,
+      rgba: await runWithTileBudget(
+        request.model,
+        state.backend,
+        request.tileCount,
+        () => runWithModel(state, request),
+      ),
+    }
   } catch (error) {
     if (state.backend !== 'webgpu') throw error
-    if (!MODEL_CONFIGS[request.model].allowWasm) {
+    if (!getRealEsrganModelConfig(request.model).allowWasm) {
       log('warn', 'backend_fallback_skipped', request.context, {
         model: request.model,
         from: 'webgpu',
@@ -418,7 +402,15 @@ async function runTile(
     })
     releaseModel(state)
     state = await getModel(request.model, request.context)
-    return { backend: state.backend, rgba: await runWithModel(state, request) }
+    return {
+      backend: state.backend,
+      rgba: await runWithTileBudget(
+        request.model,
+        state.backend,
+        request.tileCount,
+        () => runWithModel(state, request),
+      ),
+    }
   }
 }
 

@@ -1,5 +1,6 @@
 import type { AiEnhancementModel } from '@/utils/storage'
 import { cleanupRunnerResources, waitForRunnerFrame } from '@/utils/runnerLifecycle'
+import { getRealEsrganModelConfig } from '@/utils/realEsrganModels'
 
 export type EnhancementLogContext = {
   sessionId: string
@@ -32,33 +33,6 @@ export type RunnerClient = {
   cleanup: (error: Error) => void
 }
 
-type ModelConfig = {
-  inputSize: number
-  outputSize: number
-  padding: number
-  maxTiles: number
-  maxWasmTiles: number
-  dtype: 'float32' | 'uint8'
-}
-
-const MODEL_CONFIGS: Record<AiEnhancementModel, ModelConfig> = {
-  'general-x4v3': {
-    inputSize: 128,
-    outputSize: 512,
-    padding: 16,
-    maxTiles: 100,
-    maxWasmTiles: 9,
-    dtype: 'float32',
-  },
-  x4plus: {
-    inputSize: 128,
-    outputSize: 512,
-    padding: 16,
-    maxTiles: 100,
-    maxWasmTiles: 0,
-    dtype: 'uint8',
-  },
-}
 const RUNNER_TIMEOUT_MS = 120_000
 const LOG_PREFIX = '[ImageZoom][enhancement]'
 
@@ -283,6 +257,7 @@ async function runTile(
   model: AiEnhancementModel,
   context: EnhancementLogContext,
   tile: EnhancementLogData,
+  tileCount: number,
   signal: AbortSignal,
 ): Promise<TileResult> {
   throwIfAborted(signal)
@@ -343,6 +318,7 @@ async function runTile(
         input,
         model,
         context,
+        tileCount,
         tile,
       })
     } catch (error) {
@@ -404,9 +380,9 @@ export async function createRealEsrganObjectUrl(
   const sourceHeight = source.naturalHeight
   if (sourceWidth < 1 || sourceHeight < 1) return null
 
-  const config = MODEL_CONFIGS[model]
+  const config = getRealEsrganModelConfig(model)
   const modelScale = config.outputSize / config.inputSize
-  const tileContentSize = config.inputSize - config.padding * 2
+  const tileContentSize = config.tileContentSize
   const startedAt = performance.now()
   const columns = Math.ceil(sourceWidth / tileContentSize)
   const rows = Math.ceil(sourceHeight / tileContentSize)
@@ -486,18 +462,8 @@ export async function createRealEsrganObjectUrl(
           tileCount,
           row,
           column,
-        }, signal)
+        }, tileCount, signal)
         backend = result.backend
-        if (backend === 'wasm' && tileCount > config.maxWasmTiles) {
-          logImageEnhancement('warn', 'wasm_tile_limit', context, {
-            model,
-            tileCount,
-            maxTiles: config.maxWasmTiles,
-          })
-          throw new Error(
-            `Real-ESRGAN ${model} Wasm tile limit exceeded: ${tileCount} > ${config.maxWasmTiles}`,
-          )
-        }
         tileContext.putImageData(
           new ImageData(result.rgba, config.outputSize, config.outputSize),
           0,
