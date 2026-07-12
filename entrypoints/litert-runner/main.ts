@@ -445,6 +445,7 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
   connected = true
   const port = event.ports[0]
   const canceled = new Set<number>()
+  const queued = new Set<number>()
   let queue = Promise.resolve()
   port.start()
   port.postMessage({ type: 'READY' })
@@ -452,16 +453,23 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
   port.addEventListener('message', (message: MessageEvent<RunnerRequest>) => {
     const request = message.data
     if (request.type === 'CANCEL_TILE') {
-      canceled.add(request.id)
+      if (queued.has(request.id)) canceled.add(request.id)
       return
     }
+
+    if (request.type === 'RUN_TILE') queued.add(request.id)
 
     queue = queue.then(async () => {
       if (request.type === 'DISPOSE') {
         dispose({ sessionId: 'content-script' })
+        canceled.clear()
+        queued.clear()
         return
       }
-      if (canceled.delete(request.id)) return
+      if (canceled.delete(request.id)) {
+        queued.delete(request.id)
+        return
+      }
 
       try {
         const result = await runTile(request)
@@ -478,6 +486,9 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
           id: request.id,
           ...errorData(error),
         })
+      } finally {
+        canceled.delete(request.id)
+        queued.delete(request.id)
       }
     }).catch((error: unknown) => {
       log('error', 'runner_queue_failed', { sessionId: 'content-script' }, errorData(error))

@@ -11,19 +11,24 @@ export type RunnerCleanupResources<T extends RunnerPendingRequest = RunnerPendin
   clearTimers?: () => void
   closePort?: () => void
   pending?: Map<number, T>
+  cleanupState?: { cleaned: boolean }
 }
 
 export function cleanupRunnerResources<T extends RunnerPendingRequest>(
   resources: RunnerCleanupResources<T>,
   error = new Error('LiteRT runner creation failed'),
 ): void {
+  if (resources.cleanupState?.cleaned) return
+  if (resources.cleanupState) resources.cleanupState.cleaned = true
   resources.removeListeners?.()
   resources.clearTimers?.()
-  resources.pending?.forEach((request) => {
+  const pending = resources.pending
+  resources.pending = undefined
+  pending?.forEach((request) => {
     request.cleanup()
     request.reject(error)
   })
-  resources.pending?.clear()
+  pending?.clear()
   resources.closePort?.()
   resources.removeFrame()
 }

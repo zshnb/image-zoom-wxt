@@ -23,11 +23,13 @@ type PendingRequest = {
   reject: (error: Error) => void
   cleanup: () => void
 }
-type RunnerClient = {
+export type RunnerClient = {
   iframe: HTMLIFrameElement
   port: MessagePort
   pending: Map<number, PendingRequest>
   nextId: number
+  invalidated: boolean
+  cleanup: (error: Error) => void
 }
 
 type ModelConfig = {
@@ -61,6 +63,21 @@ const RUNNER_TIMEOUT_MS = 120_000
 const LOG_PREFIX = '[ImageZoom][enhancement]'
 
 let runnerPromise: Promise<RunnerClient> | null = null
+let activeRunner: RunnerClient | null = null
+
+function createAbortError(): DOMException {
+  return new DOMException('Image enhancement canceled', 'AbortError')
+}
+
+export function invalidateRunner(runner: RunnerClient, error: Error): void {
+  if (runner.invalidated) return
+  runner.invalidated = true
+  if (activeRunner === runner) {
+    activeRunner = null
+    runnerPromise = null
+  }
+  runner.cleanup(error)
+}
 
 function errorDetails(error: unknown): EnhancementLogData {
   if (error instanceof Error) {
@@ -111,11 +128,24 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
   let channel: MessageChannel | null = null
   let pending: Map<number, PendingRequest> | null = null
   let readyTimeout: ReturnType<typeof setTimeout> | null = null
+  let messageListener: ((event: MessageEvent<RunnerResponse>) => void) | null = null
+  let messageErrorListener: (() => void) | null = null
+  let createdRunner: RunnerClient | null = null
+  const cleanupState = { cleaned: false }
   const clearRunnerTimers = (): void => {
     if (readyTimeout !== null) {
       clearTimeout(readyTimeout)
       readyTimeout = null
     }
+  }
+  const removeRunnerListeners = (): void => {
+    if (!channel) return
+    if (messageListener) channel.port1.removeEventListener('message', messageListener)
+    if (messageErrorListener) {
+      channel.port1.removeEventListener('messageerror', messageErrorListener)
+    }
+    messageListener = null
+    messageErrorListener = null
   }
 
   logImageEnhancement('info', 'runner_create_start', context, { iframeUrl })
@@ -142,7 +172,8 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
       readyReject = reject
     })
 
-    runnerChannel.port1.addEventListener('message', (event: MessageEvent<RunnerResponse>) => {
+    messageListener = (event: MessageEvent<RunnerResponse>): void => {
+      if (cleanupState.cleaned) return
       const response = event.data
       if (response.type === 'READY') {
         readyResolve?.()
@@ -165,16 +196,17 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
         backend: response.backend,
         rgba: new Uint8ClampedArray(response.rgba),
       })
-    })
-    runnerChannel.port1.addEventListener('messageerror', () => {
+    }
+    messageErrorListener = (): void => {
+      if (cleanupState.cleaned) return
       const error = new Error('LiteRT runner message could not be decoded')
       readyReject?.(error)
-      runnerPending.forEach((request) => {
-        request.cleanup()
-        request.reject(error)
-      })
-      runnerPending.clear()
-    })
+      if (createdRunner) {
+        invalidateRunner(createdRunner, error)
+      }
+    }
+    runnerChannel.port1.addEventListener('message', messageListener)
+    runnerChannel.port1.addEventListener('messageerror', messageErrorListener)
     runnerChannel.port1.start()
     iframe.contentWindow.postMessage(
       { type: 'IMAGE_ZOOM_LITERT_CONNECT' },
@@ -191,10 +223,31 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
     logImageEnhancement('info', 'runner_ready', context, {
       durationMs: Math.round(performance.now() - startedAt),
     })
-    return { iframe, port: runnerChannel.port1, pending: runnerPending, nextId: 1 }
+    createdRunner = {
+      iframe,
+      port: runnerChannel.port1,
+      pending: runnerPending,
+      nextId: 1,
+      invalidated: false,
+      cleanup: (error: Error): void => {
+        cleanupRunnerResources({
+          removeFrame: removeIframe,
+          removeListeners: removeRunnerListeners,
+          clearTimers: clearRunnerTimers,
+          closePort: () => {
+            runnerChannel.port1.close()
+            runnerChannel.port2.close()
+          },
+          pending: runnerPending,
+          cleanupState,
+        }, error)
+      },
+    }
+    return createdRunner
   } catch (error) {
     cleanupRunnerResources({
       removeFrame: removeIframe,
+      removeListeners: removeRunnerListeners,
       clearTimers: clearRunnerTimers,
       closePort: channel
         ? () => {
@@ -203,6 +256,7 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
           }
         : undefined,
       pending: pending ?? undefined,
+      cleanupState,
     }, error instanceof Error ? error : new Error(String(error)))
     throw error
   } finally {
@@ -212,11 +266,14 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
 
 async function getRunner(context: EnhancementLogContext): Promise<RunnerClient> {
   if (!runnerPromise) {
-    runnerPromise = createRunner(context).catch((error: unknown) => {
-      runnerPromise = null
+    const creating = createRunner(context)
+    let trackedPromise: Promise<RunnerClient>
+    trackedPromise = creating.catch((error: unknown) => {
+      if (runnerPromise === trackedPromise) runnerPromise = null
       logImageEnhancement('error', 'runner_create_failed', context, errorDetails(error))
       throw error
     })
+    runnerPromise = trackedPromise
   }
   return runnerPromise
 }
@@ -230,38 +287,69 @@ async function runTile(
 ): Promise<TileResult> {
   throwIfAborted(signal)
   const runner = await getRunner(context)
-  throwIfAborted(signal)
+  activeRunner = runner
+  if (signal.aborted) {
+    const error = createAbortError()
+    invalidateRunner(runner, error)
+    throw error
+  }
   const id = runner.nextId
   runner.nextId += 1
 
   return new Promise<TileResult>((resolve, reject) => {
-    const onAbort = (): void => {
-      runner.pending.delete(id)
-      runner.port.postMessage({ type: 'CANCEL_TILE', id })
-      cleanup()
-      reject(new DOMException('Image enhancement canceled', 'AbortError'))
-    }
-    const timeout = window.setTimeout(() => {
-      runner.pending.delete(id)
-      runner.port.postMessage({ type: 'CANCEL_TILE', id })
-      cleanup()
-      reject(new Error(`Real-ESRGAN tile timed out after ${RUNNER_TIMEOUT_MS}ms`))
-    }, RUNNER_TIMEOUT_MS)
+    let settled = false
+    let timeout: number | null = null
+    let onAbort = (): void => undefined
     const cleanup = (): void => {
-      window.clearTimeout(timeout)
+      if (timeout !== null) {
+        window.clearTimeout(timeout)
+        timeout = null
+      }
       signal.removeEventListener('abort', onAbort)
     }
+    const rejectOnce = (error: Error): void => {
+      if (settled) return
+      settled = true
+      runner.pending.delete(id)
+      cleanup()
+      reject(error)
+    }
+    const cancelRunnerRequest = (): void => {
+      try {
+        runner.port.postMessage({ type: 'CANCEL_TILE', id })
+      } catch {
+        // Runner invalidation below is the active cancellation mechanism.
+      }
+    }
+    onAbort = (): void => {
+      const error = createAbortError()
+      rejectOnce(error)
+      cancelRunnerRequest()
+      invalidateRunner(runner, error)
+    }
+    timeout = window.setTimeout(() => {
+      const error = new Error(`Real-ESRGAN tile timed out after ${RUNNER_TIMEOUT_MS}ms`)
+      rejectOnce(error)
+      cancelRunnerRequest()
+      invalidateRunner(runner, error)
+    }, RUNNER_TIMEOUT_MS)
 
     runner.pending.set(id, { resolve, reject, cleanup })
     signal.addEventListener('abort', onAbort, { once: true })
-    runner.port.postMessage({
-      type: 'RUN_TILE',
-      id,
-      input,
-      model,
-      context,
-      tile,
-    })
+    try {
+      runner.port.postMessage({
+        type: 'RUN_TILE',
+        id,
+        input,
+        model,
+        context,
+        tile,
+      })
+    } catch (error) {
+      const postError = error instanceof Error ? error : new Error(String(error))
+      rejectOnce(postError)
+      invalidateRunner(runner, postError)
+    }
   })
 }
 
@@ -471,19 +559,19 @@ export async function createRealEsrganObjectUrl(
 }
 
 export function disposeRealEsrgan(context: EnhancementLogContext): void {
-  const activeRunner = runnerPromise
-  runnerPromise = null
-  if (!activeRunner) return
+  const runner = activeRunner
+  if (runner) {
+    invalidateRunner(runner, new Error('LiteRT runner disposed'))
+    logImageEnhancement('info', 'runner_disposed', context)
+    return
+  }
 
-  void activeRunner.then((runner) => {
-    runner.pending.forEach((request) => {
-      request.cleanup()
-      request.reject(new Error('LiteRT runner disposed'))
-    })
-    runner.pending.clear()
-    runner.port.postMessage({ type: 'DISPOSE' })
-    runner.port.close()
-    runner.iframe.remove()
+  const pendingRunner = runnerPromise
+  runnerPromise = null
+  if (!pendingRunner) return
+
+  void pendingRunner.then((createdRunner) => {
+    invalidateRunner(createdRunner, new Error('LiteRT runner disposed'))
     logImageEnhancement('info', 'runner_disposed', context)
   }).catch((error: unknown) => {
     logImageEnhancement('warn', 'runner_dispose_failed', context, errorDetails(error))
