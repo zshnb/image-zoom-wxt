@@ -2,11 +2,6 @@ import {
   fetchBoundedImage,
   resolveImageFetchPolicy,
 } from '@/utils/imageFetchPolicy'
-import {
-  isClaimRunnerSessionMessage,
-  isIssueRunnerSessionMessage,
-  RunnerSessionStore,
-} from '@/utils/runnerProtocol'
 
 type DownloadImageMessage = {
   type: 'DOWNLOAD_IMAGE'
@@ -32,7 +27,6 @@ type FetchImageResponse =
 const MAX_ENHANCEMENT_IMAGE_BYTES = 12 * 1024 * 1024
 const BASE64_CHUNK_SIZE = 32 * 1024
 const ENHANCEMENT_LOG_PREFIX = '[ImageZoom][enhancement]'
-const runnerSessions = new RunnerSessionStore()
 
 function isDownloadImageMessage(msg: unknown): msg is DownloadImageMessage {
   if (typeof msg !== 'object' || msg === null) return false
@@ -143,25 +137,6 @@ async function downloadImage(msg: DownloadImageMessage): Promise<{ ok: boolean }
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
-    if (isIssueRunnerSessionMessage(msg)) {
-      if (sender.tab?.id === undefined) {
-        sendResponse({ ok: false, error: 'invalid_sender' })
-        return false
-      }
-      sendResponse({ ok: true, token: runnerSessions.issue(sender.tab.id) })
-      return false
-    }
-
-    if (isClaimRunnerSessionMessage(msg)) {
-      if (sender.tab?.id === undefined) {
-        sendResponse({ ok: false, error: 'invalid_sender' })
-        return false
-      }
-      const claimed = runnerSessions.claim(msg.token, sender.tab.id)
-      sendResponse(claimed ? { ok: true } : { ok: false, error: 'invalid_session' })
-      return false
-    }
-
     if (isFetchImageMessage(msg)) {
       if (sender.tab?.id === undefined || typeof sender.tab.url !== 'string') {
         sendResponse({ ok: false, error: 'invalid_sender' })

@@ -22,6 +22,11 @@ import {
   logImageEnhancement,
   type EnhancementLogContext,
 } from '@/utils/realEsrgan'
+import {
+  getEnhancementOutcomeMessageKey,
+  type AppliedEnhancementAlgorithm,
+} from '@/utils/enhancementOutcome'
+import { clearUpscaleCache, createUpscaleCacheKey } from '@/utils/upscaleCache'
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
@@ -946,9 +951,16 @@ export default defineContentScript({
         restoreOriginalSource()
       }
 
-      const getUpscaleTarget = (): { key: string; width: number; height: number } | null => {
+      const getUpscaleTarget = (): {
+        key: string
+        width: number
+        height: number
+        sourceGeneration: number
+        mode: Exclude<ImageEnhancementMode, 'off'>
+      } | null => {
+        const mode = activeEnhancementMode
         if (
-          activeEnhancementMode === 'off'
+          mode === 'off'
           || baseWidth < 1
           || baseHeight < 1
           || !sourceReady
@@ -963,7 +975,7 @@ export default defineContentScript({
         if (sourceWidth < 1 || sourceHeight < 1 || sourcePixels >= MAX_LANCZOS_PIXELS) return null
 
         let upscaleScale = AI_UPSCALE_SCALE
-        if (activeEnhancementMode !== 'ai') {
+        if (mode !== 'ai') {
           const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
           const wantedWidth = baseWidth * targetScale * pixelRatio
           const wantedHeight = baseHeight * targetScale * pixelRatio
@@ -990,13 +1002,17 @@ export default defineContentScript({
         if (width <= sourceWidth || height <= sourceHeight) return null
 
         return {
-          key: `${activeEnhancementMode}:${
-            activeEnhancementMode === 'ai'
-              ? activeAiEnhancementModel
-              : 'na'
-          }:${width}x${height}`,
+          key: createUpscaleCacheKey({
+            sourceGeneration,
+            mode,
+            aiModel: activeAiEnhancementModel,
+            width,
+            height,
+          }),
           width,
           height,
+          sourceGeneration,
+          mode,
         }
       }
 
@@ -1025,8 +1041,9 @@ export default defineContentScript({
 
         const requestId = upscaleRequestId + 1
         upscaleRequestId = requestId
-        const requestMode = activeEnhancementMode
+        const requestMode = target.mode
         const requestAiModel = activeAiEnhancementModel
+        const requestSourceGeneration = target.sourceGeneration
         const requestContext = { ...enhancementContext, requestId }
         const cached = upscaleCache.get(target.key)
         if (cached) {
@@ -1045,6 +1062,8 @@ export default defineContentScript({
         upscaleAbortController = abortController
         inFlightUpscaleKey = target.key
         let objectUrl: string | null = null
+        let appliedAlgorithm: AppliedEnhancementAlgorithm = null
+        let requestCanceled = false
         try {
           setLoading(true)
           await waitForNextFrame()
@@ -1066,7 +1085,7 @@ export default defineContentScript({
 
           if (requestMode === 'ai') {
             try {
-              objectUrl = await createRealEsrganObjectUrl(
+              const aiObjectUrl = await createRealEsrganObjectUrl(
                 enhancementSource,
                 target.width,
                 target.height,
@@ -1074,6 +1093,10 @@ export default defineContentScript({
                 requestContext,
                 abortController.signal,
               )
+              if (aiObjectUrl) {
+                objectUrl = aiObjectUrl
+                appliedAlgorithm = 'ai'
+              }
             } catch (error) {
               if (isEnhancementAbort(error)) throw error
               logImageEnhancement('warn', 'algorithm_fallback', requestContext, {
@@ -1090,11 +1113,15 @@ export default defineContentScript({
               targetWidth: target.width,
               targetHeight: target.height,
             })
-            objectUrl = await createLanczosObjectUrl(
+            const lanczosObjectUrl = await createLanczosObjectUrl(
               enhancementSource,
               target.width,
               target.height,
             )
+            if (lanczosObjectUrl) {
+              objectUrl = lanczosObjectUrl
+              appliedAlgorithm = 'lanczos'
+            }
             logImageEnhancement('info', 'lanczos_upscale_complete', requestContext, {
               durationMs: Math.round(performance.now() - startedAt),
               success: objectUrl !== null,
@@ -1102,6 +1129,7 @@ export default defineContentScript({
           }
         } catch (error) {
           if (isEnhancementAbort(error)) {
+            requestCanceled = true
             logImageEnhancement('debug', 'upscale_request_aborted', requestContext, {
               mode: requestMode,
             })
@@ -1117,12 +1145,20 @@ export default defineContentScript({
             upscaleAbortController = null
             inFlightUpscaleKey = ''
           }
-          if (!overlayClosed && requestId === upscaleRequestId) {
+          if (
+            !overlayClosed
+            && requestId === upscaleRequestId
+            && requestSourceGeneration === sourceGeneration
+          ) {
             setLoading(false)
           }
         }
 
-        if (overlayClosed || requestId !== upscaleRequestId) {
+        if (
+          overlayClosed
+          || requestId !== upscaleRequestId
+          || requestSourceGeneration !== sourceGeneration
+        ) {
           if (objectUrl) URL.revokeObjectURL(objectUrl)
           return
         }
@@ -1130,6 +1166,14 @@ export default defineContentScript({
         if (!objectUrl) {
           sourceFailed = true
           restoreOriginalSource()
+          const outcomeKey = getEnhancementOutcomeMessageKey({
+            requestedMode: requestMode,
+            appliedAlgorithm,
+            canceled: requestCanceled,
+          })
+          if (outcomeKey) {
+            showStatus(browser.i18n.getMessage(outcomeKey) || 'Couldn’t create clearer image')
+          }
           return
         }
 
@@ -1137,8 +1181,16 @@ export default defineContentScript({
         showUpscaledSource(objectUrl, target.key)
         logImageEnhancement('info', 'upscale_request_applied', requestContext, {
           mode: requestMode,
+          appliedAlgorithm,
           cacheKey: target.key,
         })
+        const outcomeKey = getEnhancementOutcomeMessageKey({
+          requestedMode: requestMode,
+          appliedAlgorithm,
+        })
+        if (outcomeKey) {
+          showStatus(browser.i18n.getMessage(outcomeKey))
+        }
       }
 
       const scheduleUpscale = (): void => {
@@ -1192,7 +1244,10 @@ export default defineContentScript({
 
       const activateSource = (index: number): void => {
         if (index < 0 || index >= sourceUrls.length || overlayClosed) return
-        if (sourceGeneration > 0) cancelUpscale()
+        if (sourceGeneration > 0) {
+          cancelUpscale()
+          clearUpscaleCache(upscaleCache)
+        }
 
         activeSourceIndex = index
         src = sourceUrls[index]
@@ -1374,8 +1429,7 @@ export default defineContentScript({
         if (statusTimer) window.clearTimeout(statusTimer)
         if (animationFrame) cancelAnimationFrame(animationFrame)
         cancelUpscale()
-        upscaleCache.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-        upscaleCache.clear()
+        clearUpscaleCache(upscaleCache)
         if (sourceImage.src.startsWith('data:')) sourceImage.src = ''
         logImageEnhancement('info', 'overlay_cleanup_complete', enhancementContext)
       }

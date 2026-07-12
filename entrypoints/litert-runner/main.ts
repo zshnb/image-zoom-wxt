@@ -9,14 +9,11 @@ import {
   type CompiledModel,
 } from '@litertjs/core'
 import type { AiEnhancementModel } from '@/utils/storage'
-import {
-  isRunnerRequest,
-  type RunnerLogContext as LogContext,
-  type RunnerLogData as LogData,
-  type RunnerRequest,
-} from '@/utils/runnerProtocol'
 
+type LogContext = { sessionId: string; requestId?: number }
+type LogData = Record<string, unknown>
 type ModelDtype = 'float32' | 'uint8'
+type ModelInput = Float32Array<ArrayBuffer> | Uint8Array<ArrayBuffer>
 type RuntimeState = { jspi: boolean }
 type ModelConfig = {
   url:
@@ -33,7 +30,17 @@ type ModelState = {
   modelName: AiEnhancementModel
   model: CompiledModel
 }
-type RunTileRequest = Extract<RunnerRequest, { type: 'RUN_TILE' }>
+type RunTileRequest = {
+  type: 'RUN_TILE'
+  id: number
+  input: ModelInput
+  model: AiEnhancementModel
+  context: LogContext
+  tile: LogData
+}
+type CancelRequest = { type: 'CANCEL_TILE'; id: number }
+type DisposeRequest = { type: 'DISPOSE' }
+type RunnerRequest = RunTileRequest | CancelRequest | DisposeRequest
 
 const MODEL_CONFIGS: Record<AiEnhancementModel, ModelConfig> = {
   'general-x4v3': {
@@ -426,38 +433,15 @@ function dispose(context: LogContext): void {
   log('info', 'runtime_disposed', context)
 }
 
-function getSessionToken(): string | null {
-  const token = new URLSearchParams(location.hash.slice(1)).get('token')
-  return token && token.length >= 32 && token.length <= 128 ? token : null
-}
-
-const sessionToken = getSessionToken()
-const sessionClaim = sessionToken
-  ? browser.runtime.sendMessage({
-      type: 'CLAIM_LITERT_RUNNER_SESSION',
-      token: sessionToken,
-    }).then((response: unknown) => (
-      typeof response === 'object'
-      && response !== null
-      && (response as Record<string, unknown>).ok === true
-    )).catch(() => false)
-  : Promise.resolve(false)
-
 let connected = false
-let connecting = false
-window.addEventListener('message', async (event: MessageEvent<unknown>) => {
-  if (connected || connecting || event.source !== parent || event.ports.length !== 1) return
-  if (typeof event.data !== 'object' || event.data === null) return
-  const connect = event.data as Record<string, unknown>
+window.addEventListener('message', (event: MessageEvent<unknown>) => {
+  if (connected || event.source !== parent || event.ports.length !== 1) return
   if (
-    Object.keys(connect).length !== 2
-    || connect.type !== 'IMAGE_ZOOM_LITERT_CONNECT'
-    || typeof connect.token !== 'string'
-    || connect.token !== sessionToken
+    typeof event.data !== 'object'
+    || event.data === null
+    || (event.data as Record<string, unknown>).type !== 'IMAGE_ZOOM_LITERT_CONNECT'
   ) return
 
-  connecting = true
-  if (!await sessionClaim) return
   connected = true
   const port = event.ports[0]
   const canceled = new Set<number>()
@@ -465,24 +449,8 @@ window.addEventListener('message', async (event: MessageEvent<unknown>) => {
   port.start()
   port.postMessage({ type: 'READY' })
 
-  port.addEventListener('message', (message: MessageEvent<unknown>) => {
+  port.addEventListener('message', (message: MessageEvent<RunnerRequest>) => {
     const request = message.data
-    if (!isRunnerRequest(request)) {
-      if (
-        typeof request === 'object'
-        && request !== null
-        && Number.isInteger((request as Record<string, unknown>).id)
-        && Number((request as Record<string, unknown>).id) > 0
-      ) {
-        port.postMessage({
-          type: 'RUN_TILE_ERROR',
-          id: (request as { id: number }).id,
-          errorName: 'TypeError',
-          errorMessage: 'Invalid runner request',
-        })
-      }
-      return
-    }
     if (request.type === 'CANCEL_TILE') {
       canceled.add(request.id)
       return

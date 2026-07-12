@@ -71,6 +71,18 @@
     "message": "Creating a clearer image",
     "description": "Image enhancement processing label"
   },
+  "viewerAiEnhancementReady": {
+    "message": "AI clarity ready",
+    "description": "AI image enhancement success state"
+  },
+  "viewerAiEnhancementFallback": {
+    "message": "AI unavailable — showing quick clarity",
+    "description": "AI image enhancement fallback state"
+  },
+  "viewerEnhancementFailed": {
+    "message": "Couldn’t create clearer image",
+    "description": "Image enhancement failure state"
+  },
   "viewerOpenImage": {
     "message": "Open",
     "description": "Open original image action"

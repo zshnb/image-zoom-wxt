@@ -71,6 +71,18 @@
     "message": "正在生成高清图片",
     "description": "图片清晰算法处理中提示"
   },
+  "viewerAiEnhancementReady": {
+    "message": "智能高清已完成",
+    "description": "智能高清处理成功状态"
+  },
+  "viewerAiEnhancementFallback": {
+    "message": "智能高清不可用，已使用快速清晰",
+    "description": "智能高清处理降级状态"
+  },
+  "viewerEnhancementFailed": {
+    "message": "无法生成清晰图片",
+    "description": "图片清晰处理失败状态"
+  },
   "viewerOpenImage": {
     "message": "打开",
     "description": "打开原图操作"
