@@ -27,6 +27,7 @@ import {
   type AppliedEnhancementAlgorithm,
 } from '@/utils/enhancementOutcome'
 import { clearUpscaleCache, createUpscaleCacheKey } from '@/utils/upscaleCache'
+import { resizeLanczos3, throwIfAborted } from '@/utils/lanczos'
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
@@ -49,7 +50,6 @@ type FetchImageResponse =
       finalUrl: string
     }
   | { ok: false; error: string }
-type ResizeWeight = { indices: number[]; weights: number[] }
 type ImageCandidate = { url: string; score: number }
 type ImageSources = { urls: string[]; upgradeCount: number }
 type ZoomOverlayElement = HTMLDivElement & {
@@ -58,12 +58,10 @@ type ZoomOverlayElement = HTMLDivElement & {
   setAiEnhancementModel?: (model: AiEnhancementModel) => void
 }
 
-const LANCZOS_RADIUS = 3
 const MAX_LANCZOS_SCALE = 4
 const AI_UPSCALE_SCALE = 4
 const MAX_LANCZOS_PIXELS = 6_000_000
 const UPSCALE_IDLE_DELAY_MS = 120
-const RESIZE_YIELD_MS = 12
 const MIN_BACKGROUND_IMAGE_SIZE = 24
 const IMAGE_DATA_ATTRIBUTES = [
   'data-full-src',
@@ -183,53 +181,6 @@ function waitForNextFrame(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => resolve())
   })
-}
-
-function sinc(value: number): number {
-  if (value === 0) return 1
-  const angle = Math.PI * value
-  return Math.sin(angle) / angle
-}
-
-function lanczos3(value: number): number {
-  const x = Math.abs(value)
-  if (x >= LANCZOS_RADIUS) return 0
-  return sinc(x) * sinc(x / LANCZOS_RADIUS)
-}
-
-function createLanczosWeights(sourceSize: number, targetSize: number): ResizeWeight[] {
-  const scale = targetSize / sourceSize
-  const weights: ResizeWeight[] = []
-
-  for (let target = 0; target < targetSize; target += 1) {
-    const sourceCenter = (target + 0.5) / scale - 0.5
-    const start = Math.ceil(sourceCenter - LANCZOS_RADIUS)
-    const end = Math.floor(sourceCenter + LANCZOS_RADIUS)
-    const indices: number[] = []
-    const values: number[] = []
-    let total = 0
-
-    for (let source = start; source <= end; source += 1) {
-      if (source < 0 || source >= sourceSize) continue
-
-      const weight = lanczos3(sourceCenter - source)
-      if (weight === 0) continue
-
-      indices.push(source)
-      values.push(weight)
-      total += weight
-    }
-
-    if (total !== 0) {
-      for (let i = 0; i < values.length; i += 1) {
-        values[i] /= total
-      }
-    }
-
-    weights.push({ indices, weights: values })
-  }
-
-  return weights
 }
 
 function getMessage(name: Parameters<typeof browser.i18n.getMessage>[0], fallback: string): string {
@@ -403,79 +354,13 @@ function triggerAnchorDownload(src: string): void {
   link.remove()
 }
 
-async function resizeLanczos3(
-  sourceData: Uint8ClampedArray,
-  sourceWidth: number,
-  sourceHeight: number,
-  targetWidth: number,
-  targetHeight: number,
-): Promise<Uint8ClampedArray<ArrayBuffer>> {
-  const horizontalWeights = createLanczosWeights(sourceWidth, targetWidth)
-  const verticalWeights = createLanczosWeights(sourceHeight, targetHeight)
-  const horizontal = new Float32Array(targetWidth * sourceHeight * 4)
-  const output = new Uint8ClampedArray(targetWidth * targetHeight * 4)
-  let lastYield = performance.now()
-
-  for (let y = 0; y < sourceHeight; y += 1) {
-    for (let x = 0; x < targetWidth; x += 1) {
-      const { indices, weights } = horizontalWeights[x]
-      const targetOffset = (y * targetWidth + x) * 4
-
-      for (let i = 0; i < indices.length; i += 1) {
-        const sourceOffset = (y * sourceWidth + indices[i]) * 4
-        const weight = weights[i]
-        horizontal[targetOffset] += sourceData[sourceOffset] * weight
-        horizontal[targetOffset + 1] += sourceData[sourceOffset + 1] * weight
-        horizontal[targetOffset + 2] += sourceData[sourceOffset + 2] * weight
-        horizontal[targetOffset + 3] += sourceData[sourceOffset + 3] * weight
-      }
-    }
-
-    if (performance.now() - lastYield >= RESIZE_YIELD_MS) {
-      await waitForNextFrame()
-      lastYield = performance.now()
-    }
-  }
-
-  for (let y = 0; y < targetHeight; y += 1) {
-    const { indices, weights } = verticalWeights[y]
-
-    for (let x = 0; x < targetWidth; x += 1) {
-      const targetOffset = (y * targetWidth + x) * 4
-      let red = 0
-      let green = 0
-      let blue = 0
-      let alpha = 0
-
-      for (let i = 0; i < indices.length; i += 1) {
-        const sourceOffset = (indices[i] * targetWidth + x) * 4
-        const weight = weights[i]
-        red += horizontal[sourceOffset] * weight
-        green += horizontal[sourceOffset + 1] * weight
-        blue += horizontal[sourceOffset + 2] * weight
-        alpha += horizontal[sourceOffset + 3] * weight
-      }
-
-      output[targetOffset] = red
-      output[targetOffset + 1] = green
-      output[targetOffset + 2] = blue
-      output[targetOffset + 3] = alpha
-    }
-
-    if (performance.now() - lastYield >= RESIZE_YIELD_MS) {
-      await waitForNextFrame()
-      lastYield = performance.now()
-    }
-  }
-
-  return output
-}
-
 async function createLanczosObjectUrl(
   source: HTMLImageElement,
   targetWidth: number,
   targetHeight: number,
+  signal: AbortSignal,
 ): Promise<string | null> {
+  throwIfAborted(signal)
   const sourceWidth = source.naturalWidth
   const sourceHeight = source.naturalHeight
   if (sourceWidth < 1 || sourceHeight < 1) return null
@@ -485,13 +370,16 @@ async function createLanczosObjectUrl(
   sourceCanvas.height = sourceHeight
 
   const sourceContext = sourceCanvas.getContext('2d')
+  throwIfAborted(signal)
   if (!sourceContext) return null
 
   let imageData: ImageData
   try {
+    throwIfAborted(signal)
     sourceContext.drawImage(source, 0, 0)
     imageData = sourceContext.getImageData(0, 0, sourceWidth, sourceHeight)
   } catch {
+    if (signal.aborted) throwIfAborted(signal)
     return null
   }
 
@@ -501,20 +389,37 @@ async function createLanczosObjectUrl(
     sourceHeight,
     targetWidth,
     targetHeight,
+    signal,
   )
+  throwIfAborted(signal)
 
   const targetCanvas = document.createElement('canvas')
   targetCanvas.width = targetWidth
   targetCanvas.height = targetHeight
 
   const targetContext = targetCanvas.getContext('2d')
+  throwIfAborted(signal)
   if (!targetContext) return null
 
   targetContext.putImageData(new ImageData(resized, targetWidth, targetHeight), 0, 0)
+  throwIfAborted(signal)
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     targetCanvas.toBlob((blob) => {
-      resolve(blob ? URL.createObjectURL(blob) : null)
+      if (signal.aborted) {
+        if (blob) {
+          const canceledUrl = URL.createObjectURL(blob)
+          URL.revokeObjectURL(canceledUrl)
+        }
+        reject(new DOMException('Image enhancement canceled', 'AbortError'))
+        return
+      }
+      if (!blob) {
+        resolve(null)
+        return
+      }
+      const objectUrl = URL.createObjectURL(blob)
+      resolve(objectUrl)
     }, 'image/png')
   })
 }
@@ -1117,6 +1022,7 @@ export default defineContentScript({
               enhancementSource,
               target.width,
               target.height,
+              abortController.signal,
             )
             if (lanczosObjectUrl) {
               objectUrl = lanczosObjectUrl

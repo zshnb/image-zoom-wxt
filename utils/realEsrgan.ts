@@ -1,4 +1,5 @@
 import type { AiEnhancementModel } from '@/utils/storage'
+import { cleanupRunnerResources, waitForRunnerFrame } from '@/utils/runnerLifecycle'
 
 export type EnhancementLogContext = {
   sessionId: string
@@ -101,93 +102,112 @@ async function createRunner(context: EnhancementLogContext): Promise<RunnerClien
   iframe.setAttribute('aria-hidden', 'true')
   iframe.setAttribute('tabindex', '-1')
   iframe.style.display = 'none'
+  let iframeRemoved = false
+  const removeIframe = (): void => {
+    if (iframeRemoved) return
+    iframeRemoved = true
+    iframe.remove()
+  }
+  let channel: MessageChannel | null = null
+  let pending: Map<number, PendingRequest> | null = null
+  let readyTimeout: ReturnType<typeof setTimeout> | null = null
+  const clearRunnerTimers = (): void => {
+    if (readyTimeout !== null) {
+      clearTimeout(readyTimeout)
+      readyTimeout = null
+    }
+  }
 
   logImageEnhancement('info', 'runner_create_start', context, { iframeUrl })
-  await new Promise<void>((resolve, reject) => {
-    const timeout = window.setTimeout(() => reject(new Error('LiteRT runner load timed out')), 10_000)
-    iframe.addEventListener('load', () => {
-      window.clearTimeout(timeout)
-      resolve()
-    }, { once: true })
-    iframe.addEventListener('error', () => {
-      window.clearTimeout(timeout)
-      reject(new Error('LiteRT runner failed to load'))
-    }, { once: true })
-    document.documentElement.appendChild(iframe)
-  })
-
-  if (!iframe.contentWindow) {
-    iframe.remove()
-    throw new Error('LiteRT runner window is unavailable')
-  }
-
-  const channel = new MessageChannel()
-  const pending = new Map<number, PendingRequest>()
-  let readyResolve: (() => void) | null = null
-  let readyReject: ((error: Error) => void) | null = null
-  const ready = new Promise<void>((resolve, reject) => {
-    readyResolve = resolve
-    readyReject = reject
-  })
-
-  channel.port1.addEventListener('message', (event: MessageEvent<RunnerResponse>) => {
-    const response = event.data
-    if (response.type === 'READY') {
-      readyResolve?.()
-      return
-    }
-
-    const request = pending.get(response.id)
-    if (!request) return
-    pending.delete(response.id)
-    request.cleanup()
-
-    if (response.type === 'RUN_TILE_ERROR') {
-      const error = new Error(response.errorMessage)
-      if (response.errorName) error.name = response.errorName
-      request.reject(error)
-      return
-    }
-
-    request.resolve({
-      backend: response.backend,
-      rgba: new Uint8ClampedArray(response.rgba),
-    })
-  })
-  channel.port1.addEventListener('messageerror', () => {
-    const error = new Error('LiteRT runner message could not be decoded')
-    readyReject?.(error)
-    pending.forEach((request) => {
-      request.cleanup()
-      request.reject(error)
-    })
-    pending.clear()
-  })
-  channel.port1.start()
-  iframe.contentWindow.postMessage(
-    { type: 'IMAGE_ZOOM_LITERT_CONNECT' },
-    new URL(iframeUrl).origin,
-    [channel.port2],
-  )
-
-  const readyTimeout = window.setTimeout(() => {
-    readyReject?.(new Error('LiteRT runner handshake timed out'))
-  }, 10_000)
-
   try {
+    await waitForRunnerFrame(
+      iframe,
+      (frame) => document.documentElement.appendChild(frame),
+      10_000,
+      removeIframe,
+    )
+
+    if (!iframe.contentWindow) {
+      throw new Error('LiteRT runner window is unavailable')
+    }
+
+    const runnerChannel = new MessageChannel()
+    channel = runnerChannel
+    const runnerPending = new Map<number, PendingRequest>()
+    pending = runnerPending
+    let readyResolve: (() => void) | null = null
+    let readyReject: ((error: Error) => void) | null = null
+    const ready = new Promise<void>((resolve, reject) => {
+      readyResolve = resolve
+      readyReject = reject
+    })
+
+    runnerChannel.port1.addEventListener('message', (event: MessageEvent<RunnerResponse>) => {
+      const response = event.data
+      if (response.type === 'READY') {
+        readyResolve?.()
+        return
+      }
+
+      const request = runnerPending.get(response.id)
+      if (!request) return
+      runnerPending.delete(response.id)
+      request.cleanup()
+
+      if (response.type === 'RUN_TILE_ERROR') {
+        const error = new Error(response.errorMessage)
+        if (response.errorName) error.name = response.errorName
+        request.reject(error)
+        return
+      }
+
+      request.resolve({
+        backend: response.backend,
+        rgba: new Uint8ClampedArray(response.rgba),
+      })
+    })
+    runnerChannel.port1.addEventListener('messageerror', () => {
+      const error = new Error('LiteRT runner message could not be decoded')
+      readyReject?.(error)
+      runnerPending.forEach((request) => {
+        request.cleanup()
+        request.reject(error)
+      })
+      runnerPending.clear()
+    })
+    runnerChannel.port1.start()
+    iframe.contentWindow.postMessage(
+      { type: 'IMAGE_ZOOM_LITERT_CONNECT' },
+      new URL(iframeUrl).origin,
+      [runnerChannel.port2],
+    )
+
+    readyTimeout = setTimeout(() => {
+      readyReject?.(new Error('LiteRT runner handshake timed out'))
+    }, 10_000)
+
     await ready
+
+    logImageEnhancement('info', 'runner_ready', context, {
+      durationMs: Math.round(performance.now() - startedAt),
+    })
+    return { iframe, port: runnerChannel.port1, pending: runnerPending, nextId: 1 }
   } catch (error) {
-    channel.port1.close()
-    iframe.remove()
+    cleanupRunnerResources({
+      removeFrame: removeIframe,
+      clearTimers: clearRunnerTimers,
+      closePort: channel
+        ? () => {
+            channel?.port1.close()
+            channel?.port2.close()
+          }
+        : undefined,
+      pending: pending ?? undefined,
+    }, error instanceof Error ? error : new Error(String(error)))
     throw error
   } finally {
-    window.clearTimeout(readyTimeout)
+    clearRunnerTimers()
   }
-
-  logImageEnhancement('info', 'runner_ready', context, {
-    durationMs: Math.round(performance.now() - startedAt),
-  })
-  return { iframe, port: channel.port1, pending, nextId: 1 }
 }
 
 async function getRunner(context: EnhancementLogContext): Promise<RunnerClient> {
