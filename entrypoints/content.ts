@@ -825,9 +825,32 @@ export default defineContentScript({
         ),
       )
 
+      const clampTranslation = (): void => {
+        if (baseWidth < 1 || baseHeight < 1) return
+
+        const maxTranslateX = Math.max(
+          0,
+          (baseWidth * currentScale - overlay.clientWidth) / 2,
+        )
+        const maxTranslateY = Math.max(
+          0,
+          (baseHeight * currentScale - overlay.clientHeight) / 2,
+        )
+
+        translateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, translateX))
+        translateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, translateY))
+      }
+
       const renderTransform = (): void => {
+        clampTranslation()
         img.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${currentScale})`
       }
+
+      const handleViewportResize = (): void => {
+        renderTransform()
+      }
+
+      window.addEventListener('resize', handleViewportResize)
 
       const setLoading = (isLoading: boolean): void => {
         loading.hidden = !isLoading
@@ -1332,6 +1355,7 @@ export default defineContentScript({
         logImageEnhancement('info', 'overlay_cleanup_start', enhancementContext, {
           cachedImages: upscaleCache.size,
         })
+        window.removeEventListener('resize', handleViewportResize)
         if (statusTimer) window.clearTimeout(statusTimer)
         if (animationFrame) cancelAnimationFrame(animationFrame)
         cancelUpscale()
