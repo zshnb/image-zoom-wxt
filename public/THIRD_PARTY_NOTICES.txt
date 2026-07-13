@@ -16,8 +16,8 @@ Real-ESRGAN-General-x4v3
 Source implementation: https://github.com/xinntao/Real-ESRGAN
 Model export: Qualcomm AI Hub Models 0.57.3
 Model card: https://huggingface.co/qualcomm/Real-ESRGAN-General-x4v3
-Export archive: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_general_x4v3/releases/v0.57.3/real_esrgan_general_x4v3-tflite-float.zip
-Packaged model SHA-256: 3556594da2688410557c98d2857d4628ddd46208a5ce61cfa9c81a1a789487bf
+Export archive: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_general_x4v3/releases/v0.57.3/real_esrgan_general_x4v3-tflite-w8a8.zip
+Packaged model SHA-256: 00cdfe6e5c04487bbea5cd1f632285ef35bb73157cf35a24562cf07188e8e3e3
 License: BSD 3-Clause
 
 RealESRGAN_x4plus

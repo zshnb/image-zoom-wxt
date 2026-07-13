@@ -9,16 +9,16 @@ describe('Real-ESRGAN model metadata', () => {
   it('keeps the current model shapes, preprocessing, and backend limits', () => {
     expect(REAL_ESRGAN_MODEL_CONFIGS).toEqual({
       'general-x4v3': {
-        url: '/models/real_esrgan_general_x4v3.tflite',
+        url: '/models/real_esrgan_general_x4v3_w8a8.tflite',
         inputSize: 128,
         outputSize: 512,
         padding: 16,
         tileContentSize: 96,
-        dtype: 'float32',
+        dtype: 'uint8',
         maxTiles: 256,
-        maxWasmTiles: 100,
-        requiresJspi: false,
-        allowWasm: true,
+        maxWasmTiles: 0,
+        requiresJspi: true,
+        allowWasm: false,
       },
       x4plus: {
         url: '/models/real_esrgan_x4plus_w8a8.tflite',
@@ -37,13 +37,9 @@ describe('Real-ESRGAN model metadata', () => {
 })
 
 describe('assertTileBudget', () => {
-  it('accepts general-x4v3 WASM jobs through one hundred tiles', () => {
-    expect(() => assertTileBudget('general-x4v3', 'wasm', 100)).not.toThrow()
-  })
-
-  it('rejects general-x4v3 WASM jobs above one hundred tiles', () => {
-    expect(() => assertTileBudget('general-x4v3', 'wasm', 101)).toThrow(
-      'Real-ESRGAN general-x4v3 wasm tile limit exceeded: 101 > 100',
+  it('rejects general-x4v3 on WASM', () => {
+    expect(() => assertTileBudget('general-x4v3', 'wasm', 1)).toThrow(
+      'Real-ESRGAN general-x4v3 wasm tile limit exceeded: 1 > 0',
     )
   })
 
@@ -84,9 +80,9 @@ describe('assertTileBudget', () => {
     expect(() => runWithTileBudget(
       'general-x4v3',
       'wasm',
-      101,
+      1,
       () => callbacks.push('wasm'),
-    )).toThrow('Real-ESRGAN general-x4v3 wasm tile limit exceeded: 101 > 100')
+    )).toThrow('Real-ESRGAN general-x4v3 wasm tile limit exceeded: 1 > 0')
     expect(callbacks).toEqual(['webgpu'])
   })
 

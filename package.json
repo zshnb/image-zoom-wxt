@@ -1,8 +1,8 @@
 {
   "name": "image-zoom-wxt",
-  "description": "Hold a shortcut and click any web image to open a clean zoom viewer with wheel zoom, drag, and sharp upscaling.",
+  "description": "Local AI image upscaler and zoom viewer for web images with shortcut click, wheel zoom, and drag-to-pan.",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

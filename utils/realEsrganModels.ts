@@ -3,7 +3,7 @@ import type { AiEnhancementModel } from '@/utils/storage'
 export type RealEsrganBackend = 'webgpu' | 'wasm'
 export type RealEsrganDtype = 'float32' | 'uint8'
 export type RealEsrganModelResource =
-  | '/models/real_esrgan_general_x4v3.tflite'
+  | '/models/real_esrgan_general_x4v3_w8a8.tflite'
   | '/models/real_esrgan_x4plus_w8a8.tflite'
 
 export type RealEsrganModelConfig = Readonly<{
@@ -21,16 +21,16 @@ export type RealEsrganModelConfig = Readonly<{
 
 export const REAL_ESRGAN_MODEL_CONFIGS = {
   'general-x4v3': {
-    url: '/models/real_esrgan_general_x4v3.tflite',
+    url: '/models/real_esrgan_general_x4v3_w8a8.tflite',
     inputSize: 128,
     outputSize: 512,
     padding: 16,
     tileContentSize: 96,
-    dtype: 'float32',
+    dtype: 'uint8',
     maxTiles: 256,
-    maxWasmTiles: 100,
-    requiresJspi: false,
-    allowWasm: true,
+    maxWasmTiles: 0,
+    requiresJspi: true,
+    allowWasm: false,
   },
   x4plus: {
     url: '/models/real_esrgan_x4plus_w8a8.tflite',

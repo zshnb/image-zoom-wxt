@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "点击图片放大器",
+    "message": "AI图片高清放大器 - 网页图片缩放",
     "description": "扩展名称"
   },
   "extDescription": {
-    "message": "按住快捷键点击网页图片，在当前页放大、拖动查看，还能在本地生成更清晰的大图。",
+    "message": "本地 AI 图片高清放大器，支持网页图片快捷缩放、拖动查看和 4 倍增强。",
     "description": "扩展短描述"
   },
   "popupActivationKey": {
