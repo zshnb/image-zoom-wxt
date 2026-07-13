@@ -15,8 +15,8 @@ describe('Real-ESRGAN model metadata', () => {
         padding: 16,
         tileContentSize: 96,
         dtype: 'float32',
-        maxTiles: 100,
-        maxWasmTiles: 9,
+        maxTiles: 256,
+        maxWasmTiles: 100,
         requiresJspi: false,
         allowWasm: true,
       },
@@ -27,7 +27,7 @@ describe('Real-ESRGAN model metadata', () => {
         padding: 16,
         tileContentSize: 96,
         dtype: 'uint8',
-        maxTiles: 100,
+        maxTiles: 256,
         maxWasmTiles: 0,
         requiresJspi: true,
         allowWasm: false,
@@ -37,13 +37,13 @@ describe('Real-ESRGAN model metadata', () => {
 })
 
 describe('assertTileBudget', () => {
-  it('accepts general-x4v3 WASM jobs through nine tiles', () => {
-    expect(() => assertTileBudget('general-x4v3', 'wasm', 9)).not.toThrow()
+  it('accepts general-x4v3 WASM jobs through one hundred tiles', () => {
+    expect(() => assertTileBudget('general-x4v3', 'wasm', 100)).not.toThrow()
   })
 
-  it('rejects general-x4v3 WASM jobs above nine tiles', () => {
-    expect(() => assertTileBudget('general-x4v3', 'wasm', 10)).toThrow(
-      'Real-ESRGAN general-x4v3 wasm tile limit exceeded: 10 > 9',
+  it('rejects general-x4v3 WASM jobs above one hundred tiles', () => {
+    expect(() => assertTileBudget('general-x4v3', 'wasm', 101)).toThrow(
+      'Real-ESRGAN general-x4v3 wasm tile limit exceeded: 101 > 100',
     )
   })
 
@@ -53,10 +53,10 @@ describe('assertTileBudget', () => {
     )
   })
 
-  it('keeps the global WebGPU limit at one hundred tiles', () => {
-    expect(() => assertTileBudget('general-x4v3', 'webgpu', 100)).not.toThrow()
-    expect(() => assertTileBudget('general-x4v3', 'webgpu', 101)).toThrow(
-      'Real-ESRGAN general-x4v3 webgpu tile limit exceeded: 101 > 100',
+  it('keeps the global WebGPU limit at two hundred fifty-six tiles', () => {
+    expect(() => assertTileBudget('general-x4v3', 'webgpu', 256)).not.toThrow()
+    expect(() => assertTileBudget('general-x4v3', 'webgpu', 257)).toThrow(
+      'Real-ESRGAN general-x4v3 webgpu tile limit exceeded: 257 > 256',
     )
   })
 
@@ -84,16 +84,16 @@ describe('assertTileBudget', () => {
     expect(() => runWithTileBudget(
       'general-x4v3',
       'wasm',
-      10,
+      101,
       () => callbacks.push('wasm'),
-    )).toThrow('Real-ESRGAN general-x4v3 wasm tile limit exceeded: 10 > 9')
+    )).toThrow('Real-ESRGAN general-x4v3 wasm tile limit exceeded: 101 > 100')
     expect(callbacks).toEqual(['webgpu'])
   })
 
   it('keeps over-budget errors bounded and free of model bytes and source URLs', () => {
     let message = ''
     try {
-      assertTileBudget('general-x4v3', 'wasm', 10)
+      assertTileBudget('general-x4v3', 'wasm', 101)
     } catch (error) {
       message = error instanceof Error ? error.message : String(error)
     }
