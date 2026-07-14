@@ -52,8 +52,10 @@ type FetchImageResponse =
   | { ok: false; error: string }
 type ImageCandidate = { url: string; score: number }
 type ImageSources = { urls: string[]; upgradeCount: number }
+type OverlayCloseReason = 'backdrop' | 'escape' | 'site-disabled' | 'toolbar'
 type ZoomOverlayElement = HTMLDivElement & {
-  cleanupImageZoom?: () => void
+  cleanupImageZoom?: (reason: OverlayCloseReason) => void
+  openingEventTimestamp?: number
   setImageEnhancementMode?: (mode: ImageEnhancementMode) => void
   setAiEnhancementModel?: (model: AiEnhancementModel) => void
 }
@@ -560,7 +562,11 @@ export default defineContentScript({
     }
 
     // --- Overlay ---
-    function openOverlay(sources: ImageSources, alt: string): void {
+    function openOverlay(
+      sources: ImageSources,
+      alt: string,
+      openingEventTimestamp: number,
+    ): void {
       if (document.getElementById(OVERLAY_ID)) return
 
       const sourceUrls = sources.urls
@@ -569,6 +575,7 @@ export default defineContentScript({
       const enhancementContext: EnhancementLogContext = { sessionId }
       const overlay = document.createElement('div') as ZoomOverlayElement
       overlay.id = OVERLAY_ID
+      overlay.openingEventTimestamp = openingEventTimestamp
       logImageEnhancement('info', 'overlay_open', enhancementContext, {
         hostname,
         mode: activeEnhancementMode,
@@ -628,6 +635,7 @@ export default defineContentScript({
       let sourceGeneration = 0
       let upgradeAttempted = false
       let aiUpscaleActivated = false
+      let lastUpscaleSkipKey = ''
       let overlayClosed = false
       let statusTimer = 0
       const upscaleCache = new Map<string, string>()
@@ -821,7 +829,7 @@ export default defineContentScript({
           'viewerClose',
           'Close',
           'M6 6l12 12M18 6 6 18',
-          closeOverlay,
+          () => closeOverlay('toolbar'),
         ),
       )
 
@@ -879,6 +887,23 @@ export default defineContentScript({
         restoreOriginalSource()
       }
 
+      const skipUpscaleTarget = (
+        reason: string,
+        data: Record<string, unknown> = {},
+      ): null => {
+        if (activeEnhancementMode !== 'ai' || !aiUpscaleActivated) return null
+
+        const skipKey = `${sourceGeneration}:${reason}:${JSON.stringify(data)}`
+        if (skipKey !== lastUpscaleSkipKey) {
+          lastUpscaleSkipKey = skipKey
+          logImageEnhancement('info', 'upscale_target_skipped', enhancementContext, {
+            reason,
+            ...data,
+          })
+        }
+        return null
+      }
+
       const getUpscaleTarget = (): {
         key: string
         width: number
@@ -887,20 +912,30 @@ export default defineContentScript({
         mode: Exclude<ImageEnhancementMode, 'off'>
       } | null => {
         const mode = activeEnhancementMode
-        if (
-          mode === 'off'
-          || baseWidth < 1
-          || baseHeight < 1
-          || !sourceReady
-          || sourceFailed
-        ) {
-          return null
+        if (mode === 'off') return null
+        if (baseWidth < 1 || baseHeight < 1 || !sourceReady || sourceFailed) {
+          return skipUpscaleTarget('source-not-ready', {
+            baseWidth: Math.round(baseWidth),
+            baseHeight: Math.round(baseHeight),
+            sourceReady,
+            sourceFailed,
+          })
         }
 
         const sourceWidth = sourceImage.naturalWidth
         const sourceHeight = sourceImage.naturalHeight
         const sourcePixels = sourceWidth * sourceHeight
-        if (sourceWidth < 1 || sourceHeight < 1 || sourcePixels >= MAX_LANCZOS_PIXELS) return null
+        if (sourceWidth < 1 || sourceHeight < 1) {
+          return skipUpscaleTarget('invalid-source-size', { sourceWidth, sourceHeight })
+        }
+        if (sourcePixels >= MAX_LANCZOS_PIXELS) {
+          return skipUpscaleTarget('source-pixel-budget-exceeded', {
+            sourceWidth,
+            sourceHeight,
+            sourcePixels,
+            maxPixels: MAX_LANCZOS_PIXELS,
+          })
+        }
 
         let upscaleScale = AI_UPSCALE_SCALE
         if (mode !== 'ai') {
@@ -920,14 +955,31 @@ export default defineContentScript({
 
         if (width * height > MAX_LANCZOS_PIXELS) {
           const cappedScale = Math.sqrt(MAX_LANCZOS_PIXELS / sourcePixels)
-          if (cappedScale <= 1.05) return null
+          if (cappedScale <= 1.05) {
+            return skipUpscaleTarget('output-pixel-budget-exceeded', {
+              sourceWidth,
+              sourceHeight,
+              sourcePixels,
+              maxPixels: MAX_LANCZOS_PIXELS,
+              cappedScale: Number(cappedScale.toFixed(2)),
+            })
+          }
 
           upscaleScale = Math.min(upscaleScale, cappedScale)
           width = Math.round(sourceWidth * upscaleScale)
           height = Math.round(sourceHeight * upscaleScale)
         }
 
-        if (width <= sourceWidth || height <= sourceHeight) return null
+        if (width <= sourceWidth || height <= sourceHeight) {
+          return skipUpscaleTarget('no-upscale-needed', {
+            sourceWidth,
+            sourceHeight,
+            targetWidth: width,
+            targetHeight: height,
+          })
+        }
+
+        lastUpscaleSkipKey = ''
 
         return {
           key: createUpscaleCacheKey({
@@ -1189,18 +1241,8 @@ export default defineContentScript({
 
         const nextSourceImage = new Image()
         nextSourceImage.decoding = 'async'
-        try {
-          const sourceUrl = new URL(src, location.href)
-          if (
-            sourceUrl.origin !== location.origin
-            && sourceUrl.protocol !== 'data:'
-            && sourceUrl.protocol !== 'blob:'
-          ) {
-            nextSourceImage.crossOrigin = 'anonymous'
-          }
-        } catch {
-          sourceFailed = true
-        }
+        // Load cross-origin sources normally so hosts without CORS headers still display.
+        // Pixel access is checked later and recovered through the extension background.
 
         nextSourceImage.addEventListener('load', () => {
           if (generation !== sourceGeneration || overlayClosed) return
@@ -1287,8 +1329,10 @@ export default defineContentScript({
 
       renderTransform()
 
-      overlay.addEventListener('wheel', (e) => {
+      const handleOverlayWheel = (e: WheelEvent): void => {
+        if (!e.composedPath().includes(overlay)) return
         e.preventDefault()
+        e.stopPropagation()
         targetScale *= e.deltaY < 0 ? 1.12 : 1 / 1.12
         targetScale = Math.max(1, Math.min(10, targetScale))
         if (
@@ -1307,7 +1351,11 @@ export default defineContentScript({
         if (!animationFrame) {
           animationFrame = requestAnimationFrame(applyScale)
         }
-      }, { passive: false })
+      }
+
+      // Notion and similar viewers install wheel handlers on their own modal roots.
+      // Capture at document level so their handlers cannot swallow zoom gestures first.
+      document.addEventListener('wheel', handleOverlayWheel, { capture: true, passive: false })
 
       img.addEventListener('pointerdown', (e) => {
         if (currentScale <= 1) return
@@ -1350,12 +1398,14 @@ export default defineContentScript({
         e.preventDefault()
       })
 
-      overlay.cleanupImageZoom = (): void => {
+      overlay.cleanupImageZoom = (reason: OverlayCloseReason): void => {
         overlayClosed = true
         logImageEnhancement('info', 'overlay_cleanup_start', enhancementContext, {
           cachedImages: upscaleCache.size,
+          reason,
         })
         window.removeEventListener('resize', handleViewportResize)
+        document.removeEventListener('wheel', handleOverlayWheel, true)
         if (statusTimer) window.clearTimeout(statusTimer)
         if (animationFrame) cancelAnimationFrame(animationFrame)
         cancelUpscale()
@@ -1393,9 +1443,9 @@ export default defineContentScript({
       document.body.appendChild(overlay)
     }
 
-    function closeOverlay(): void {
+    function closeOverlay(reason: OverlayCloseReason): void {
       const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
-      overlay?.cleanupImageZoom?.()
+      overlay?.cleanupImageZoom?.(reason)
       overlay?.remove()
     }
 
@@ -1472,6 +1522,10 @@ export default defineContentScript({
       if (!enabled) return
       const overlay = document.getElementById(OVERLAY_ID)
       if (overlay) {
+        if (
+          overlay instanceof HTMLElement
+          && (overlay as ZoomOverlayElement).openingEventTimestamp === e.timeStamp
+        ) return
         const target = e.target
         if (!(target instanceof HTMLElement)) return
         if (overlay instanceof HTMLElement && overlay.dataset.dragMoved === 'true') {
@@ -1483,7 +1537,7 @@ export default defineContentScript({
         if (target.closest('.image-zoom-toolbar') || target.tagName === 'IMG') return
         e.preventDefault()
         e.stopPropagation()
-        closeOverlay()
+        closeOverlay('backdrop')
         return
       }
       if (!shortcutPressed) return
@@ -1492,7 +1546,7 @@ export default defineContentScript({
       e.preventDefault()
       e.stopPropagation()
       const sources = getImageSources(imageTarget)
-      if (sources) openOverlay(sources, getImageAlt(imageTarget))
+      if (sources) openOverlay(sources, getImageAlt(imageTarget), e.timeStamp)
     }
 
     // --- Hover class management ---
@@ -1585,14 +1639,14 @@ export default defineContentScript({
       enabled = value
       setTriggerActive(false)
       scanImages()
-      if (!value) closeOverlay()
+      if (!value) closeOverlay('site-disabled')
     }
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && document.getElementById(OVERLAY_ID)) {
         e.preventDefault()
         e.stopPropagation()
-        closeOverlay()
+        closeOverlay('escape')
         return
       }
 
