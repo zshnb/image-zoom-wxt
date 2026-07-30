@@ -51,6 +51,46 @@
     "message": "画质优先（较慢）",
     "description": "高画质 Real-ESRGAN 模型选项"
   },
+  "popupAiEnhancementTrigger": {
+    "message": "智能高清触发时机",
+    "description": "智能高清触发时机选择标签"
+  },
+  "aiTriggerOpen": {
+    "message": "点开图片时",
+    "description": "查看器打开时开始智能高清"
+  },
+  "aiTriggerZoom": {
+    "message": "首次放大时",
+    "description": "首次放大图片时开始智能高清"
+  },
+  "popupAiMaxInputSize": {
+    "message": "AI 最大处理尺寸",
+    "description": "智能高清输入图片大小上限选择标签"
+  },
+  "aiMaxInputSmall": {
+    "message": "小图 · 约 800 × 600",
+    "description": "50 万像素智能高清输入上限"
+  },
+  "aiMaxInputHd": {
+    "message": "高清 · 约 1280 × 720",
+    "description": "100 万像素智能高清输入上限"
+  },
+  "aiMaxInputFullHd": {
+    "message": "全高清 · 约 1920 × 1080（推荐）",
+    "description": "200 万像素智能高清输入上限"
+  },
+  "aiMaxInput2k": {
+    "message": "2K · 约 2560 × 1440",
+    "description": "400 万像素智能高清输入上限"
+  },
+  "aiMaxInputLarge": {
+    "message": "大图 · 约 3000 × 2000",
+    "description": "600 万像素智能高清输入上限"
+  },
+  "popupAiMaxInputSizeHint": {
+    "message": "上限越高，处理越慢且更占内存。",
+    "description": "智能高清输入上限性能提示"
+  },
   "popupCurrentSite": {
     "message": "当前站点",
     "description": "当前站点开关标签"

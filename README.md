@@ -83,3 +83,26 @@ Open the inspected page's DevTools console and filter for:
 Structured events include the overlay session and request IDs, runtime/model load time,
 selected model and backend, per-tile inference time, total upscale time, cache hits, cancellation,
 fallback reasons, and cleanup.
+
+# Local Real-ESRGAN CLI
+
+The extension automatically tries an installed
+`realesrgan-ncnn-vulkan` command before its browser-based AI upscaler.
+If the native host is unavailable or fails, the normal browser fallback
+continues to work.
+
+1. Build and load the unpacked extension, then copy its ID from
+   `chrome://extensions`.
+2. Install the native host:
+
+```bash
+chmod +x native-host/install.sh
+./native-host/install.sh EXTENSION_ID /absolute/path/to/realesrgan-ncnn-vulkan
+```
+
+The installer detects a sibling `models/` directory like the bundled
+`realesrgan-upscale` Skill. Pass the model directory as a third argument
+for other layouts.
+
+Restart Chrome after installation. Re-run the installer if the unpacked
+extension ID or CLI path changes.

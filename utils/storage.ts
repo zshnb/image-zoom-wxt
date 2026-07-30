@@ -40,6 +40,25 @@ export type AiEnhancementModel = (typeof aiEnhancementModels)[number]['value']
 
 export const DEFAULT_AI_ENHANCEMENT_MODEL: AiEnhancementModel = 'general-x4v3'
 
+export const aiEnhancementTriggers = [
+  { value: 'open', messageName: 'aiTriggerOpen' },
+  { value: 'zoom', messageName: 'aiTriggerZoom' },
+] as const
+
+export type AiEnhancementTrigger = (typeof aiEnhancementTriggers)[number]['value']
+
+export const DEFAULT_AI_ENHANCEMENT_TRIGGER: AiEnhancementTrigger = 'zoom'
+export const AI_MAX_INPUT_MEGAPIXELS_OPTIONS = [
+  { value: 0.5, messageName: 'aiMaxInputSmall' },
+  { value: 1, messageName: 'aiMaxInputHd' },
+  { value: 2.1, messageName: 'aiMaxInputFullHd' },
+  { value: 3.7, messageName: 'aiMaxInput2k' },
+  { value: 6, messageName: 'aiMaxInputLarge' },
+] as const
+export type AiMaxInputMegapixels =
+  (typeof AI_MAX_INPUT_MEGAPIXELS_OPTIONS)[number]['value']
+export const DEFAULT_AI_MAX_INPUT_MEGAPIXELS: AiMaxInputMegapixels = 2.1
+
 export const imageEnhancementEnabled = storage.defineItem<boolean>(
   'local:imageEnhancementEnabled',
   {
@@ -61,6 +80,16 @@ export const aiEnhancementModel = storage.defineItem<AiEnhancementModel>(
   },
 )
 
+export const aiEnhancementTrigger = storage.defineItem<AiEnhancementTrigger>(
+  'local:aiEnhancementTrigger',
+  { fallback: DEFAULT_AI_ENHANCEMENT_TRIGGER },
+)
+
+export const aiMaxInputMegapixels = storage.defineItem<AiMaxInputMegapixels>(
+  'local:aiMaxInputMegapixels',
+  { fallback: DEFAULT_AI_MAX_INPUT_MEGAPIXELS },
+)
+
 export function isImageEnhancementMode(value: unknown): value is ImageEnhancementMode {
   return imageEnhancementModes.some((mode) => mode.value === value)
 }
@@ -79,6 +108,30 @@ export function isAiEnhancementModel(value: unknown): value is AiEnhancementMode
 
 export function resolveAiEnhancementModel(value: unknown): AiEnhancementModel {
   return isAiEnhancementModel(value) ? value : DEFAULT_AI_ENHANCEMENT_MODEL
+}
+
+export function isAiEnhancementTrigger(value: unknown): value is AiEnhancementTrigger {
+  return aiEnhancementTriggers.some((trigger) => trigger.value === value)
+}
+
+export function resolveAiEnhancementTrigger(value: unknown): AiEnhancementTrigger {
+  return isAiEnhancementTrigger(value) ? value : DEFAULT_AI_ENHANCEMENT_TRIGGER
+}
+
+export function isAiMaxInputMegapixels(value: unknown): value is AiMaxInputMegapixels {
+  return AI_MAX_INPUT_MEGAPIXELS_OPTIONS.some((option) => option.value === value)
+}
+
+export function resolveAiMaxInputMegapixels(value: unknown): AiMaxInputMegapixels {
+  return isAiMaxInputMegapixels(value) ? value : DEFAULT_AI_MAX_INPUT_MEGAPIXELS
+}
+
+export function isAiInputWithinLimit(
+  width: number,
+  height: number,
+  maxMegapixels: AiMaxInputMegapixels,
+): boolean {
+  return width > 0 && height > 0 && width * height <= maxMegapixels * 1_000_000
 }
 
 export function isTriggerShortcutCode(value: unknown): value is TriggerShortcutCode {

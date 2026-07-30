@@ -51,6 +51,46 @@
     "message": "Better quality (Slower)",
     "description": "High quality Real-ESRGAN model option"
   },
+  "popupAiEnhancementTrigger": {
+    "message": "Start AI clarity",
+    "description": "AI enhancement trigger selector label"
+  },
+  "aiTriggerOpen": {
+    "message": "When image opens",
+    "description": "Start AI enhancement when the viewer opens"
+  },
+  "aiTriggerZoom": {
+    "message": "When image is zoomed",
+    "description": "Start AI enhancement on the first zoom-in"
+  },
+  "popupAiMaxInputSize": {
+    "message": "Largest image for AI",
+    "description": "Maximum AI input image size selector label"
+  },
+  "aiMaxInputSmall": {
+    "message": "Small · about 800 × 600",
+    "description": "0.5 megapixel AI input limit"
+  },
+  "aiMaxInputHd": {
+    "message": "HD · about 1280 × 720",
+    "description": "1 megapixel AI input limit"
+  },
+  "aiMaxInputFullHd": {
+    "message": "Full HD · about 1920 × 1080 (Recommended)",
+    "description": "2 megapixel AI input limit"
+  },
+  "aiMaxInput2k": {
+    "message": "2K · about 2560 × 1440",
+    "description": "4 megapixel AI input limit"
+  },
+  "aiMaxInputLarge": {
+    "message": "Large · about 3000 × 2000",
+    "description": "6 megapixel AI input limit"
+  },
+  "popupAiMaxInputSizeHint": {
+    "message": "Higher limits take longer and use more memory.",
+    "description": "AI input limit performance hint"
+  },
   "popupCurrentSite": {
     "message": "Current site",
     "description": "Current site switch label"

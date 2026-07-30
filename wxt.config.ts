@@ -24,7 +24,7 @@ export default defineConfig({
         128: 'icon/icon128.png',
       },
     },
-    permissions: ['storage', 'downloads'],
+    permissions: ['storage', 'downloads', 'nativeMessaging'],
     host_permissions: ['http://*/*', 'https://*/*'],
     content_security_policy: {
       extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",

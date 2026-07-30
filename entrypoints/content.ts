@@ -1,17 +1,28 @@
 import {
   DEFAULT_AI_ENHANCEMENT_MODEL,
+  DEFAULT_AI_ENHANCEMENT_TRIGGER,
+  DEFAULT_AI_MAX_INPUT_MEGAPIXELS,
   DEFAULT_TRIGGER_SHORTCUT,
   aiEnhancementModel,
+  aiEnhancementTrigger,
+  aiMaxInputMegapixels,
   disabledSites,
   imageEnhancementEnabled,
   imageEnhancementMode,
   isAiEnhancementModel,
+  isAiEnhancementTrigger,
+  isAiInputWithinLimit,
+  isAiMaxInputMegapixels,
   isImageEnhancementMode,
   isTriggerShortcutCode,
   resolveAiEnhancementModel,
+  resolveAiEnhancementTrigger,
+  resolveAiMaxInputMegapixels,
   resolveImageEnhancementMode,
   triggerShortcut,
   type AiEnhancementModel,
+  type AiEnhancementTrigger,
+  type AiMaxInputMegapixels,
   type ImageEnhancementMode,
   type TriggerShortcutCode,
 } from '@/utils/storage'
@@ -28,6 +39,7 @@ import {
 } from '@/utils/enhancementOutcome'
 import { clearUpscaleCache, createUpscaleCacheKey } from '@/utils/upscaleCache'
 import { resizeLanczos3, throwIfAborted } from '@/utils/lanczos'
+import { createNativeEsrganObjectUrl } from '@/utils/nativeEsrgan'
 
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type ShortcutMessage = { type: 'UPDATE_SHORTCUT'; shortcut: TriggerShortcutCode }
@@ -38,6 +50,14 @@ type ImageEnhancementMessage = {
 type AiEnhancementModelMessage = {
   type: 'UPDATE_AI_ENHANCEMENT_MODEL'
   model: AiEnhancementModel
+}
+type AiEnhancementTriggerMessage = {
+  type: 'UPDATE_AI_ENHANCEMENT_TRIGGER'
+  trigger: AiEnhancementTrigger
+}
+type AiMaxInputMegapixelsMessage = {
+  type: 'UPDATE_AI_MAX_INPUT_MEGAPIXELS'
+  megapixels: AiMaxInputMegapixels
 }
 type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
 type DownloadImageResponse = { ok: boolean }
@@ -58,6 +78,8 @@ type ZoomOverlayElement = HTMLDivElement & {
   openingEventTimestamp?: number
   setImageEnhancementMode?: (mode: ImageEnhancementMode) => void
   setAiEnhancementModel?: (model: AiEnhancementModel) => void
+  setAiEnhancementTrigger?: (trigger: AiEnhancementTrigger) => void
+  setAiMaxInputMegapixels?: (megapixels: AiMaxInputMegapixels) => void
 }
 
 const MAX_LANCZOS_SCALE = 4
@@ -104,6 +126,24 @@ function isAiEnhancementModelMessage(msg: unknown): msg is AiEnhancementModelMes
   return (
     candidate.type === 'UPDATE_AI_ENHANCEMENT_MODEL'
     && isAiEnhancementModel(candidate.model)
+  )
+}
+
+function isAiEnhancementTriggerMessage(msg: unknown): msg is AiEnhancementTriggerMessage {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return (
+    candidate.type === 'UPDATE_AI_ENHANCEMENT_TRIGGER'
+    && isAiEnhancementTrigger(candidate.trigger)
+  )
+}
+
+function isAiMaxInputMegapixelsMessage(msg: unknown): msg is AiMaxInputMegapixelsMessage {
+  if (typeof msg !== 'object' || msg === null) return false
+  const candidate = msg as Record<string, unknown>
+  return (
+    candidate.type === 'UPDATE_AI_MAX_INPUT_MEGAPIXELS'
+    && isAiMaxInputMegapixels(candidate.megapixels)
   )
 }
 
@@ -438,12 +478,16 @@ export default defineContentScript({
       storedImageEnhancementMode,
       storedImageEnhancementEnabled,
       storedAiEnhancementModel,
+      storedAiEnhancementTrigger,
+      storedAiMaxInputMegapixels,
     ] = await Promise.all([
       disabledSites.getValue(),
       triggerShortcut.getValue(),
       imageEnhancementMode.getValue(),
       imageEnhancementEnabled.getValue(),
       aiEnhancementModel.getValue(),
+      aiEnhancementTrigger.getValue(),
+      aiMaxInputMegapixels.getValue(),
     ])
     let enabled = !sites.includes(hostname)
     let activeShortcut = isTriggerShortcutCode(storedShortcut)
@@ -454,6 +498,10 @@ export default defineContentScript({
       storedImageEnhancementEnabled,
     )
     let activeAiEnhancementModel = resolveAiEnhancementModel(storedAiEnhancementModel)
+    let activeAiEnhancementTrigger = resolveAiEnhancementTrigger(storedAiEnhancementTrigger)
+    let activeAiMaxInputMegapixels = resolveAiMaxInputMegapixels(
+      storedAiMaxInputMegapixels,
+    )
     let shortcutPressed = false
 
     const HOVERABLE_CLASS = 'image-zoom-hoverable'
@@ -634,7 +682,7 @@ export default defineContentScript({
       let activeSourceIndex = 0
       let sourceGeneration = 0
       let upgradeAttempted = false
-      let aiUpscaleActivated = false
+      let aiUpscaleActivated = activeAiEnhancementTrigger === 'open'
       let lastUpscaleSkipKey = ''
       let overlayClosed = false
       let statusTimer = 0
@@ -928,6 +976,21 @@ export default defineContentScript({
         if (sourceWidth < 1 || sourceHeight < 1) {
           return skipUpscaleTarget('invalid-source-size', { sourceWidth, sourceHeight })
         }
+        if (
+          mode === 'ai'
+          && !isAiInputWithinLimit(
+            sourceWidth,
+            sourceHeight,
+            activeAiMaxInputMegapixels,
+          )
+        ) {
+          return skipUpscaleTarget('ai-input-pixel-budget-exceeded', {
+            sourceWidth,
+            sourceHeight,
+            sourcePixels,
+            maxMegapixels: activeAiMaxInputMegapixels,
+          })
+        }
         if (sourcePixels >= MAX_LANCZOS_PIXELS) {
           return skipUpscaleTarget('source-pixel-budget-exceeded', {
             sourceWidth,
@@ -1065,26 +1128,41 @@ export default defineContentScript({
 
           if (requestMode === 'ai') {
             try {
-              const aiObjectUrl = await createRealEsrganObjectUrl(
+              objectUrl = await createNativeEsrganObjectUrl(
                 enhancementSource,
                 target.width,
                 target.height,
                 requestAiModel,
-                requestContext,
                 abortController.signal,
               )
-              if (aiObjectUrl) {
-                objectUrl = aiObjectUrl
-                appliedAlgorithm = 'ai'
-              }
             } catch (error) {
               if (isEnhancementAbort(error)) throw error
-              logImageEnhancement('warn', 'algorithm_fallback', requestContext, {
-                from: requestAiModel,
-                to: 'lanczos3',
+              logImageEnhancement('warn', 'native_cli_fallback', requestContext, {
                 errorMessage: error instanceof Error ? error.message : String(error),
               })
             }
+
+            if (!objectUrl) {
+              try {
+                objectUrl = await createRealEsrganObjectUrl(
+                  enhancementSource,
+                  target.width,
+                  target.height,
+                  requestAiModel,
+                  requestContext,
+                  abortController.signal,
+                )
+              } catch (error) {
+                if (isEnhancementAbort(error)) throw error
+                logImageEnhancement('warn', 'algorithm_fallback', requestContext, {
+                  from: requestAiModel,
+                  to: 'lanczos3',
+                  errorMessage: error instanceof Error ? error.message : String(error),
+                })
+              }
+            }
+
+            if (objectUrl) appliedAlgorithm = 'ai'
           }
 
           if (!objectUrl) {
@@ -1420,7 +1498,10 @@ export default defineContentScript({
           mode: nextMode,
         })
         if (nextMode === 'off') return
-        if (nextMode === 'ai' && targetScale > 1) {
+        if (
+          nextMode === 'ai'
+          && (activeAiEnhancementTrigger === 'open' || targetScale > 1)
+        ) {
           aiUpscaleActivated = true
         }
 
@@ -1433,6 +1514,18 @@ export default defineContentScript({
         logImageEnhancement('info', 'ai_model_changed', enhancementContext, {
           model: nextModel,
         })
+        scheduleUpscale()
+      }
+
+      overlay.setAiEnhancementTrigger = (nextTrigger: AiEnhancementTrigger): void => {
+        cancelUpscale()
+        aiUpscaleActivated = nextTrigger === 'open' || targetScale > 1
+        scheduleUpscale()
+      }
+
+      overlay.setAiMaxInputMegapixels = (): void => {
+        if (activeEnhancementMode !== 'ai') return
+        cancelUpscale()
         scheduleUpscale()
       }
 
@@ -1461,6 +1554,22 @@ export default defineContentScript({
         : DEFAULT_AI_ENHANCEMENT_MODEL
       const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
       overlay?.setAiEnhancementModel?.(activeAiEnhancementModel)
+    }
+
+    function applyAiEnhancementTrigger(value: AiEnhancementTrigger): void {
+      activeAiEnhancementTrigger = isAiEnhancementTrigger(value)
+        ? value
+        : DEFAULT_AI_ENHANCEMENT_TRIGGER
+      const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
+      overlay?.setAiEnhancementTrigger?.(activeAiEnhancementTrigger)
+    }
+
+    function applyAiMaxInputMegapixels(value: AiMaxInputMegapixels): void {
+      activeAiMaxInputMegapixels = isAiMaxInputMegapixels(value)
+        ? value
+        : DEFAULT_AI_MAX_INPUT_MEGAPIXELS
+      const overlay = document.getElementById(OVERLAY_ID) as ZoomOverlayElement | null
+      overlay?.setAiMaxInputMegapixels?.(activeAiMaxInputMegapixels)
     }
 
     // --- Image click handler ---
@@ -1681,6 +1790,14 @@ export default defineContentScript({
       applyAiEnhancementModel(nextModel)
     })
 
+    aiEnhancementTrigger.watch((nextTrigger) => {
+      applyAiEnhancementTrigger(nextTrigger)
+    })
+
+    aiMaxInputMegapixels.watch((nextMegapixels) => {
+      applyAiMaxInputMegapixels(nextMegapixels)
+    })
+
     disabledSites.watch((nextSites) => {
       applyEnabled(!nextSites.includes(hostname))
     })
@@ -1705,6 +1822,14 @@ export default defineContentScript({
 
       if (isAiEnhancementModelMessage(msg)) {
         applyAiEnhancementModel(msg.model)
+      }
+
+      if (isAiEnhancementTriggerMessage(msg)) {
+        applyAiEnhancementTrigger(msg.trigger)
+      }
+
+      if (isAiMaxInputMegapixelsMessage(msg)) {
+        applyAiMaxInputMegapixels(msg.megapixels)
       }
     })
 

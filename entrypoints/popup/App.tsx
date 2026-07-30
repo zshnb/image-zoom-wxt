@@ -1,21 +1,33 @@
 import { useEffect, useState } from 'react'
 import {
+  AI_MAX_INPUT_MEGAPIXELS_OPTIONS,
   DEFAULT_AI_ENHANCEMENT_MODEL,
+  DEFAULT_AI_ENHANCEMENT_TRIGGER,
+  DEFAULT_AI_MAX_INPUT_MEGAPIXELS,
   DEFAULT_TRIGGER_SHORTCUT,
   aiEnhancementModel,
   aiEnhancementModels,
+  aiEnhancementTrigger,
+  aiEnhancementTriggers,
+  aiMaxInputMegapixels,
   disabledSites,
   imageEnhancementEnabled,
   imageEnhancementMode,
   imageEnhancementModes,
   isAiEnhancementModel,
+  isAiEnhancementTrigger,
+  isAiMaxInputMegapixels,
   isImageEnhancementMode,
   isTriggerShortcutCode,
   resolveAiEnhancementModel,
+  resolveAiEnhancementTrigger,
+  resolveAiMaxInputMegapixels,
   resolveImageEnhancementMode,
   triggerShortcut,
   triggerShortcuts,
   type AiEnhancementModel,
+  type AiEnhancementTrigger,
+  type AiMaxInputMegapixels,
   type ImageEnhancementMode,
   type TriggerShortcutCode,
 } from '@/utils/storage'
@@ -29,6 +41,14 @@ type AiEnhancementModelMessage = {
   type: 'UPDATE_AI_ENHANCEMENT_MODEL'
   model: AiEnhancementModel
 }
+type AiEnhancementTriggerMessage = {
+  type: 'UPDATE_AI_ENHANCEMENT_TRIGGER'
+  trigger: AiEnhancementTrigger
+}
+type AiMaxInputMegapixelsMessage = {
+  type: 'UPDATE_AI_MAX_INPUT_MEGAPIXELS'
+  megapixels: AiMaxInputMegapixels
+}
 type ToggleMessage = { type: 'TOGGLE_ZOOM'; enabled: boolean }
 type PageStatusMessage = { type: 'GET_PAGE_STATUS' }
 type PageStatusResponse = { hostname: string; enabled: boolean }
@@ -36,6 +56,8 @@ type PopupMessage =
   | ShortcutMessage
   | ImageEnhancementMessage
   | AiEnhancementModelMessage
+  | AiEnhancementTriggerMessage
+  | AiMaxInputMegapixelsMessage
   | ToggleMessage
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type MessageName = Parameters<typeof browser.i18n.getMessage>[0]
@@ -74,6 +96,14 @@ function App() {
     useState<AiEnhancementModel>(DEFAULT_AI_ENHANCEMENT_MODEL)
   const [aiEnhancementModelState, setAiEnhancementModelState] =
     useState<SaveState>('idle')
+  const [activeAiEnhancementTrigger, setActiveAiEnhancementTrigger] =
+    useState<AiEnhancementTrigger>(DEFAULT_AI_ENHANCEMENT_TRIGGER)
+  const [aiEnhancementTriggerState, setAiEnhancementTriggerState] =
+    useState<SaveState>('idle')
+  const [activeAiMaxInputMegapixels, setActiveAiMaxInputMegapixels] =
+    useState<AiMaxInputMegapixels>(DEFAULT_AI_MAX_INPUT_MEGAPIXELS)
+  const [aiMaxInputMegapixelsState, setAiMaxInputMegapixelsState] =
+    useState<SaveState>('idle')
   const [hostname, setHostname] = useState('')
   const [isSiteEnabled, setIsSiteEnabled] = useState(true)
   const [siteState, setSiteState] = useState<SaveState>('idle')
@@ -86,12 +116,16 @@ function App() {
         storedImageEnhancementMode,
         storedImageEnhancementEnabled,
         storedAiEnhancementModel,
+        storedAiEnhancementTrigger,
+        storedAiMaxInputMegapixels,
       ] = await Promise.all([
         browser.tabs.query({ active: true, currentWindow: true }),
         triggerShortcut.getValue(),
         imageEnhancementMode.getValue(),
         imageEnhancementEnabled.getValue(),
         aiEnhancementModel.getValue(),
+        aiEnhancementTrigger.getValue(),
+        aiMaxInputMegapixels.getValue(),
       ])
       const activeTabId = tab?.id ?? null
 
@@ -105,6 +139,10 @@ function App() {
         ),
       )
       setActiveAiEnhancementModel(resolveAiEnhancementModel(storedAiEnhancementModel))
+      setActiveAiEnhancementTrigger(resolveAiEnhancementTrigger(storedAiEnhancementTrigger))
+      setActiveAiMaxInputMegapixels(
+        resolveAiMaxInputMegapixels(storedAiMaxInputMegapixels),
+      )
       setTabId(activeTabId)
 
       if (activeTabId === null) return
@@ -190,6 +228,41 @@ function App() {
     }
   }
 
+  const onAiEnhancementTriggerChange = async (value: string): Promise<void> => {
+    if (!isAiEnhancementTrigger(value)) return
+
+    const previousValue = activeAiEnhancementTrigger
+    setActiveAiEnhancementTrigger(value)
+    setAiEnhancementTriggerState('saving')
+
+    try {
+      await aiEnhancementTrigger.setValue(value)
+      await notifyActiveTab({ type: 'UPDATE_AI_ENHANCEMENT_TRIGGER', trigger: value })
+      setAiEnhancementTriggerState('saved')
+    } catch {
+      setActiveAiEnhancementTrigger(previousValue)
+      setAiEnhancementTriggerState('error')
+    }
+  }
+
+  const onAiMaxInputMegapixelsChange = async (value: string): Promise<void> => {
+    const megapixels = Number(value)
+    if (!isAiMaxInputMegapixels(megapixels)) return
+
+    const previousValue = activeAiMaxInputMegapixels
+    setActiveAiMaxInputMegapixels(megapixels)
+    setAiMaxInputMegapixelsState('saving')
+
+    try {
+      await aiMaxInputMegapixels.setValue(megapixels)
+      await notifyActiveTab({ type: 'UPDATE_AI_MAX_INPUT_MEGAPIXELS', megapixels })
+      setAiMaxInputMegapixelsState('saved')
+    } catch {
+      setActiveAiMaxInputMegapixels(previousValue)
+      setAiMaxInputMegapixelsState('error')
+    }
+  }
+
   const onSiteEnabledChange = async (enabled: boolean): Promise<void> => {
     if (!hostname) return
 
@@ -215,6 +288,8 @@ function App() {
   const shortcutStatusLabel = getStatusLabel(shortcutState)
   const imageEnhancementStatusLabel = getStatusLabel(imageEnhancementState)
   const aiEnhancementModelStatusLabel = getStatusLabel(aiEnhancementModelState)
+  const aiEnhancementTriggerStatusLabel = getStatusLabel(aiEnhancementTriggerState)
+  const aiMaxInputMegapixelsStatusLabel = getStatusLabel(aiMaxInputMegapixelsState)
   const siteStatusLabel = getStatusLabel(siteState)
 
   return (
@@ -309,6 +384,67 @@ function App() {
                     className={`text-xs font-medium ${getStatusClass(aiEnhancementModelState)}`}
                   >
                     {aiEnhancementModelStatusLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <label className="min-w-0 flex-1">
+                <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  {t('popupAiEnhancementTrigger')}
+                </span>
+                <select
+                  value={activeAiEnhancementTrigger}
+                  disabled={aiEnhancementTriggerState === 'saving'}
+                  onChange={(event) => {
+                    void onAiEnhancementTriggerChange(event.target.value)
+                  }}
+                  className="mt-2 h-9 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs font-medium text-zinc-950 outline-none transition-colors focus:border-blue-600 disabled:cursor-wait dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500"
+                >
+                  {aiEnhancementTriggers.map((trigger) => (
+                    <option key={trigger.value} value={trigger.value}>
+                      {t(trigger.messageName)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex min-h-9 items-center pb-0.5">
+                {aiEnhancementTriggerStatusLabel && (
+                  <span className={`text-xs font-medium ${getStatusClass(aiEnhancementTriggerState)}`}>
+                    {aiEnhancementTriggerStatusLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <label className="min-w-0 flex-1">
+                <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  {t('popupAiMaxInputSize')}
+                </span>
+                <select
+                  value={activeAiMaxInputMegapixels}
+                  disabled={aiMaxInputMegapixelsState === 'saving'}
+                  onChange={(event) => {
+                    void onAiMaxInputMegapixelsChange(event.target.value)
+                  }}
+                  className="mt-2 h-9 w-full rounded-lg border border-zinc-300 bg-white px-2 text-xs font-medium text-zinc-950 outline-none transition-colors focus:border-blue-600 disabled:cursor-wait dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-blue-500"
+                >
+                  {AI_MAX_INPUT_MEGAPIXELS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {t(option.messageName)}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1.5 block text-[11px] leading-4 text-zinc-500 dark:text-zinc-500">
+                  {t('popupAiMaxInputSizeHint')}
+                </span>
+              </label>
+              <div className="flex min-h-9 items-center pb-0.5">
+                {aiMaxInputMegapixelsStatusLabel && (
+                  <span className={`text-xs font-medium ${getStatusClass(aiMaxInputMegapixelsState)}`}>
+                    {aiMaxInputMegapixelsStatusLabel}
                   </span>
                 )}
               </div>

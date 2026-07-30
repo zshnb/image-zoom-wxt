@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { fakeBrowser } from 'wxt/testing'
 import {
+  AI_MAX_INPUT_MEGAPIXELS_OPTIONS,
+  aiEnhancementTriggers,
   aiEnhancementModels,
   DEFAULT_AI_ENHANCEMENT_MODEL,
+  DEFAULT_AI_ENHANCEMENT_TRIGGER,
+  DEFAULT_AI_MAX_INPUT_MEGAPIXELS,
   imageEnhancementModes,
+  isAiInputWithinLimit,
   isTriggerShortcutCode,
   resolveAiEnhancementModel,
+  resolveAiEnhancementTrigger,
+  resolveAiMaxInputMegapixels,
   resolveImageEnhancementMode,
   triggerShortcut,
   triggerShortcuts,
@@ -13,6 +20,35 @@ import {
 
 afterEach(() => {
   fakeBrowser.reset()
+})
+
+describe('AI enhancement options', () => {
+  it.each(aiEnhancementTriggers.map(({ value }) => value))(
+    'keeps the valid trigger %s',
+    (trigger) => {
+      expect(resolveAiEnhancementTrigger(trigger)).toBe(trigger)
+    },
+  )
+
+  it.each(AI_MAX_INPUT_MEGAPIXELS_OPTIONS.map(({ value }) => value))(
+    'keeps the valid input limit %s MP',
+    (megapixels) => {
+      expect(resolveAiMaxInputMegapixels(megapixels)).toBe(megapixels)
+    },
+  )
+
+  it.each([undefined, null, false, 'invalid', 0, 3, 7, {}])(
+    'uses defaults for invalid AI options: %s',
+    (value) => {
+      expect(resolveAiEnhancementTrigger(value)).toBe(DEFAULT_AI_ENHANCEMENT_TRIGGER)
+      expect(resolveAiMaxInputMegapixels(value)).toBe(DEFAULT_AI_MAX_INPUT_MEGAPIXELS)
+    },
+  )
+
+  it('applies the megapixel limit to total source pixels', () => {
+    expect(isAiInputWithinLimit(1_920, 1_080, 2.1)).toBe(true)
+    expect(isAiInputWithinLimit(2_000, 1_100, 2.1)).toBe(false)
+  })
 })
 
 describe('trigger shortcuts', () => {
