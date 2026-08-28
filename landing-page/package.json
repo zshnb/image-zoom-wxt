@@ -1,0 +1,11 @@
+{
+  "name": "click-image-zoom-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "test": "pnpm run build && node worker/index.test.js && node scripts/seo-check.mjs",
+    "build": "rm -rf dist && mkdir -p dist/assets dist/server dist/.openai && cp site/*.txt site/styles.css public/* dist/assets/ && cp content/facts.md dist/assets/facts.md && node scripts/generate-seo-pages.mjs && cp worker/index.js dist/server/index.js && cp .openai/hosting.json dist/.openai/hosting.json"
+  }
+}

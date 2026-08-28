@@ -1,0 +1,8 @@
+.next
+.codegraph
+dist
+out
+node_modules
+.DS_Store
+*.log
+*.tsbuildinfo
