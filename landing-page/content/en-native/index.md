@@ -1,68 +1,64 @@
 ---
 route: /en/
-title: "Click Image Zoom: Zoom and Upscale Web Images Locally"
-meta_description: "Open webpage images in place, zoom up to 10x, and optionally apply local 4x AI enhancement without downloads, uploads, or an account."
+title: "Image Zoom Extension for Chrome | Click Image Zoom"
+meta_description: "Install a free Chrome image zoom extension to open webpage images in place. Hold a key and click, then zoom up to 10x or pan; optional local 4x AI needs no account."
 primary_intent: category-hub
 workbench_qids: [q101, q901]
 status: draft
 ---
 
-# Zoom Any Web Image
+# Image Zoom Extension for Chrome
 
-Open any webpage image in place, zoom up to 10x, and enhance it locally when needed. No downloads, uploads, or account required.
+Hold your chosen modifier key and click a webpage image to open it in a viewer on the same page. Use the mouse wheel to zoom up to 10x and drag to inspect details. Click Image Zoom is free to install from the Chrome Web Store; the viewer and optional local 4x AI enhancement need no account or subscription.
 
-## What Click Image Zoom Does
+## Zoom One Image Without Leaving the Webpage
 
-Most browsers let you right-click and open an image in a new tab, but that breaks your browsing flow and gives you no zoom or enhancement controls. Click Image Zoom keeps everything in place. The viewer opens as an overlay on the current page, and you stay in context while you inspect the image.
+Click Image Zoom is a Chrome image zoom extension for inspecting a single webpage image. It opens an overlay above the current page, so you can look at a product photo, chart, screenshot, or thumbnail and return to the same browsing context. You do not need to download the image or open another tab.
 
-The core workflow is intentional: you choose a modifier key — Shift, Alt, Ctrl, or Command — and hold it while clicking an image. That deliberate gesture means the viewer only opens when you want it, not on every accidental hover or click.
+Choose a modifier key — Shift, Alt, Ctrl, or Command — in settings. Hold it while clicking the image you want to inspect. The viewer opens only after that gesture, not whenever your pointer passes over a picture.
 
 Once the viewer is open:
 
 - **Mouse-wheel zoom** scales the image up to 10x.
 - **Click and drag** pans around the zoomed image.
-- **Optional AI enhancement** creates a locally processed 4x version without uploading image pixels.
+- **Optional local 4x AI enhancement** is available if ordinary zoom is not clear enough; it supports manual or configurable automatic triggering.
 
-## The Hold-Key-and-Click Workflow
+## How to Install and Use the Chrome Extension
 
-The activation model is a deliberate design choice. You pick one of four modifier keys in the extension settings — Shift, Alt, Ctrl, or Command — and that key becomes your trigger. Holding it while clicking an image opens the in-page viewer; clicking without it behaves normally.
+Install Click Image Zoom from the Chrome Web Store, choose one of the four modifier keys in extension settings, then hold it and click an image on a webpage. Scroll to zoom and drag to pan; close the viewer to continue browsing. Clicking without your chosen key behaves normally.
 
-This means the extension does not interfere with ordinary browsing. Links, buttons, and images all work as usual until you explicitly invoke the viewer. For people who inspect many images in a session — product researchers, designers reviewing references, anyone reading image-heavy articles — this keeps the workflow fast without adding noise.
+The viewer and local AI enhancement are free, with no account or subscription. If you want the full walkthrough, see [how to zoom images on web pages](/zoom-images-on-web-pages/).
 
-## Zoom Up to 10x
+## When This Image Zoom Extension Fits
 
-The viewer supports smooth mouse-wheel zoom up to 10x. You can zoom in on fine detail in a product photo, read small text in a screenshot, or examine a chart without downloading the file. Drag to pan at any zoom level.
+This workflow is useful when you repeatedly inspect product photos, image-search thumbnails, screenshots, or charts and want to keep the surrounding page visible. Mouse-wheel zoom reaches up to 10x display scale, while drag-to-pan lets you move around a zoomed image.
 
-The 10x ceiling applies to the viewer's display zoom. The actual detail you can see depends on the resolution of the original image as served by the website — the extension does not control how the source site stores or compresses its images.
+It is not a fit if you want automatic hover previews, full-page browser zoom, batch editing, or guaranteed support for every website. It is documented for Chrome; compatibility with other browsers is not documented. The detail you can actually see still depends on the original image served by the website.
 
-## Sharper Details, Processed Locally
+## Click-to-Zoom Versus Hover Zoom and Browser Zoom
+
+Hover tools open a preview when the pointer moves over an image. That can suit quick glances, but it may cover nearby content or open when you did not intend it. Click Image Zoom requires a modifier key and a click, then gives you wheel zoom and pan inside a dedicated viewer.
+
+Chrome's built-in page zoom scales the whole webpage, including text and controls. This extension focuses on one selected image while leaving the rest of the page in place. If you want a full comparison, see [click-to-zoom versus hover zoom](/compare-hover-zoom/).
+
+## Optional 4x AI Enhancement, Processed Locally
 
 Small or compressed image? Create an optional 4x enhanced version without uploading it. Processing stays on your device.
 
 - **4x enhancement** for small and compressed web images.
 - **Private by design:** image pixels are not sent to a cloud AI service.
-- **Always optional:** normal zoom and pan remain available without AI.
+- **Optional and configurable:** trigger it manually or configure automatic enhancement when opening an image or first zooming in; normal zoom and pan remain available without AI.
 
 Enhancement can improve visible clarity, but it cannot recreate detail missing from the original image. See [Click Image Zoom features and controls](/product/) for model options, processing limits, and compatibility details.
 
-## Who Uses Click Image Zoom
-
-The extension is useful for anyone who regularly inspects images while browsing:
-
-- **Online shoppers** examining product details, fabric textures, or size labels in ecommerce thumbnails.
-- **Researchers and analysts** reading charts, diagrams, and screenshots embedded in articles.
-- **Designers and developers** reviewing reference images or UI screenshots without leaving the browser.
-- **General users** who want to see a full-size image without opening a new tab or downloading a file.
-
-No account is required for the documented core workflow.
-
-## Limitations to Know Before Installing
+## Privacy, Price, and Limitations to Know
 
 - The extension works in Chrome. Compatibility with other browsers is not documented.
 - It does not control how the original website stores or serves its images. A heavily compressed source image will still be compressed after enhancement — AI improves appearance, not ground truth.
 - AI enhancement cannot guarantee readable text recovery or forensic accuracy.
 - Local processing speed varies by device and image size.
-- Current pricing and plan details should be verified on the Chrome Web Store listing before installing.
+- The viewer and local AI enhancement are free; no account or subscription is required.
+- The extension does not upload image pixels to a cloud AI service for enhancement. The original website still controls how it serves its images; see the [privacy policy](/privacy/) for scope.
 
 ## Frequently Asked Questions
 
@@ -70,7 +66,7 @@ No account is required for the documented core workflow.
 No. AI enhancement runs locally on your device. Image pixels are not uploaded to a cloud AI service.
 
 **Do I have to use AI enhancement every time?**
-No. You can use the viewer and zoom controls without triggering AI. Enhancement is optional and on-demand.
+No. You can use the viewer and zoom controls without AI. AI enhancement supports both manual and automatic triggering. In settings, you can configure automatic enhancement when opening an image or first zooming in, or trigger it manually when needed.
 
 **What if AI processing is not available on my device?**
 The extension falls back gracefully. The viewer, standard zoom, pan, and clarity mode remain usable without AI.
@@ -84,6 +80,7 @@ Compatibility varies. The extension does not document support for every website 
 ### Popular Guides and Use Cases
 
 - [What the viewer controls and AI modes look like in practice →](/product/)
+- [Step-by-step guide to zooming one image on a webpage →](/zoom-images-on-web-pages/)
 - [How local AI enhancement works and what it cannot do →](/local-ai-image-upscaler/)
 - [Compare click-to-zoom with hover tools and new tabs →](/compare-hover-zoom/)
 - [Pricing, access, and account requirements →](/pricing/)
@@ -97,4 +94,4 @@ Compatibility varies. The extension does not document support for every website 
 
 Facts on this page are drawn from the Click Image Zoom product source and official documentation, verified 2026-07-30. Claims marked as limitations or caveats reflect documented product behavior and upstream technical constraints of the Real-ESRGAN model family.
 
-**Last reviewed:** July 31, 2026
+**Last reviewed:** September 24, 2026

@@ -6,7 +6,8 @@ const installUrl = 'https://chromewebstore.google.com/detail/ai-image-upscaler-z
 const logoUrl = `${root}/icon128.png`
 const contactEmail = 'a857681664@gmail.com'
 const published = '2026-07-29'
-const updated = '2026-08-17'
+const updated = '2026-09-09'
+const homeUpdated = '2026-09-24'
 const productDefinition = 'Click Image Zoom is a Chrome extension that lets you open webpage images in an in-page viewer, zoom up to 10x, and apply optional local 4x AI enhancement without uploading image pixels to a cloud AI service.'
 
 const topics = [
@@ -511,6 +512,8 @@ function page(topic, lang) {
   const isEn = lang === 'en'
   const englishOnly = !topic.zh && topic.slug !== ''
   const path = pathFor(topic.slug, lang)
+  const pageUpdated = topic.slug ? updated : homeUpdated
+  const visual = topic.slug ? 'clickzoom-screenshot-ai-1280x800.webp' : 'clickzoom-screenshot-viewer-1280x800.webp'
   const related = topics.filter(item => item.slug !== topic.slug)
   const howToSteps = isEn ? [
     ['Choose a trigger key', 'Select Shift, Alt, Ctrl, or Command in the extension settings.'],
@@ -538,8 +541,8 @@ function page(topic, lang) {
   ]
   if (topic.slug) {
     const pageEntity = copy.schemaType === 'WebPage'
-      ? { '@type': 'WebPage', url: `${root}${path}`, name: copy.heading, description: schemaDescription, inLanguage: isEn ? 'en' : 'zh-CN', datePublished: published, dateModified: updated, about: { '@id': `${root}/#software` } }
-      : { '@type': copy.schemaType ?? 'TechArticle', headline: copy.heading, description: schemaDescription, inLanguage: isEn ? 'en' : 'zh-CN', datePublished: published, dateModified: updated, author: { '@id': `${root}/#organization` }, publisher: { '@id': `${root}/#organization` }, mainEntityOfPage: `${root}${path}`, about: { '@id': `${root}/#software` }, citation: [installUrl.split('?')[0], 'https://github.com/xinntao/Real-ESRGAN', `${root}/facts.md`] }
+      ? { '@type': 'WebPage', url: `${root}${path}`, name: copy.heading, description: schemaDescription, inLanguage: isEn ? 'en' : 'zh-CN', datePublished: published, dateModified: pageUpdated, about: { '@id': `${root}/#software` } }
+      : { '@type': copy.schemaType ?? 'TechArticle', headline: copy.heading, description: schemaDescription, inLanguage: isEn ? 'en' : 'zh-CN', datePublished: published, dateModified: pageUpdated, author: { '@id': `${root}/#organization` }, publisher: { '@id': `${root}/#organization` }, mainEntityOfPage: `${root}${path}`, about: { '@id': `${root}/#software` }, citation: [installUrl.split('?')[0], 'https://github.com/xinntao/Real-ESRGAN', `${root}/facts.md`] }
     graph.push(
       pageEntity,
       { '@type': 'BreadcrumbList', itemListElement: [
@@ -550,7 +553,7 @@ function page(topic, lang) {
   } else {
     graph.push(
       { '@type': 'WebSite', '@id': `${root}/#website`, name: 'Click Image Zoom', url: `${root}/`, inLanguage: ['en', 'zh-CN'], publisher: { '@id': `${root}/#organization` } },
-      { '@type': 'WebPage', '@id': `${root}/#webpage`, url: `${root}/`, name: copy.title, description: copy.description, inLanguage: 'en', datePublished: published, dateModified: updated, isPartOf: { '@id': `${root}/#website` }, about: { '@id': `${root}/#software` } },
+      { '@type': 'WebPage', '@id': `${root}/#webpage`, url: `${root}/`, name: copy.title, description: copy.description, inLanguage: 'en', datePublished: published, dateModified: pageUpdated, isPartOf: { '@id': `${root}/#website` }, about: { '@id': `${root}/#software` } },
     )
   }
   if (copy.faq.length) graph.push({ '@type': 'FAQPage', inLanguage: isEn ? 'en' : 'zh-CN', mainEntity: copy.faq.map(([name, text]) => ({ '@type': 'Question', name, acceptedAnswer: { '@type': 'Answer', text } })) })
@@ -581,7 +584,7 @@ function page(topic, lang) {
     <meta property="og:title" content="${escapeHtml(copy.title)}">
     <meta property="og:description" content="${escapeHtml(copy.description)}">
     <meta property="og:url" content="${root}${path}">
-    <meta property="og:image" content="${root}/clickzoom-screenshot-ai-1280x800.webp">
+    <meta property="og:image" content="${root}/${visual}">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="canonical" href="${root}${path}">
     ${englishOnly ? '' : `<link rel="alternate" hreflang="zh-CN" href="${root}${pathFor(topic.slug, 'zh')}">`}
@@ -607,10 +610,10 @@ function page(topic, lang) {
           <p class="eyebrow">${copy.eyebrow}</p>
           <h1>${escapeHtml(copy.heading)}</h1>
           <p class="heroText">${escapeHtml(copy.intro)}</p>
-          <p class="contentMeta">${isEn ? 'Last updated' : '最后更新'}: <time datetime="${updated}">${updated}</time> · ${isEn ? 'Product documentation by Click Image Zoom' : 'Click Image Zoom 产品文档'}</p>
+          <p class="contentMeta">${isEn ? 'Last updated' : '最后更新'}: <time datetime="${pageUpdated}">${pageUpdated}</time> · ${isEn ? 'Product documentation by Click Image Zoom' : 'Click Image Zoom 产品文档'}</p>
           <a class="primaryButton" href="${installUrl}" target="_blank" rel="noopener noreferrer">${isEn ? 'Add to Chrome' : '安装 Chrome 扩展'}</a>
         </div>
-        <img class="seoVisual" src="/clickzoom-screenshot-ai-1280x800.webp" width="1280" height="800" alt="${escapeHtml(copy.heading)}" fetchpriority="high">
+        <img class="seoVisual" src="/${visual}" width="1280" height="800" alt="${topic.slug ? escapeHtml(copy.heading) : 'Click Image Zoom viewer opening one webpage image for wheel zoom and drag-to-pan'}" fetchpriority="high">
       </article>
       <section class="factBar shell" aria-label="${isEn ? 'Numeric product facts' : '数字事实'}">${numericFacts.map(([value, label]) => `<div class="fact"><strong>${value}</strong><span>${escapeHtml(label)}</span></div>`).join('')}</section>
       <section class="answerBlock shell" aria-label="${copy.bodyHtml ? 'Quick answer' : (isEn ? 'Definition' : '定义')}"><strong>${copy.bodyHtml ? 'Quick answer' : (isEn ? 'Definition' : '定义')}:</strong> ${escapeHtml(quickAnswer)}</section>
@@ -649,7 +652,7 @@ for (const topic of englishPages) {
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(path => `  <url><loc>${root}${path}</loc><lastmod>${updated}</lastmod></url>`).join('\n')}
+${urls.map(path => `  <url><loc>${root}${path}</loc><lastmod>${path === '/' || path === '/zh-cn/' ? homeUpdated : updated}</lastmod></url>`).join('\n')}
 </urlset>
 `
 await writeFile('dist/assets/sitemap-v16.xml', sitemap)
