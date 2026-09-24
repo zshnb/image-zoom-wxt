@@ -97,7 +97,7 @@ No. Enhancement runs locally on your device. Image pixels are not sent to a clou
 
 ---
 
-## Suggested internal links
+## Related guides
 
 - [Inspecting ecommerce product images](/use-cases/ecommerce-product-images/)
 - [Reading charts, screenshots, and diagrams](/use-cases/charts-and-screenshots/)

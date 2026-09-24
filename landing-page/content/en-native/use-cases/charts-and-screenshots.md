@@ -97,14 +97,14 @@ Processing runs locally and only when you trigger AI enhancement. You can set a 
 No. Enhancement runs locally on your device using Real-ESRGAN. Image pixels are not sent to a cloud AI service.
 
 **Can I zoom without enabling AI enhancement?**
-Yes. The viewer and 10x zoom work independently. AI enhancement is optional and triggered separately.
+Yes. The viewer and 10x zoom work independently. AI enhancement is optional: trigger it manually or configure automatic triggering when opening an image or first zooming in.
 
 **What if the chart is embedded through a custom page implementation?**
 Compatibility can vary with the webpage, browser permissions, and the image source available to the page. Click Image Zoom does not control how the original website presents the chart.
 
 ---
 
-## Suggested internal links
+## Related guides
 
 - [Inspecting ecommerce product images](/use-cases/ecommerce-product-images/)
 - [Browsing image search grids](/use-cases/image-search/)

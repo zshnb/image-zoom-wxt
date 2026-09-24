@@ -129,7 +129,7 @@ The extension does not control how the original website stores or serves its ima
 The model runs inside your browser. Whether it is bundled with the extension or loaded on demand depends on the extension's implementation; check the Chrome Web Store listing for current details. Either way, image pixels are not sent to a cloud AI service for processing.
 
 **Can I use the extension without ever triggering AI enhancement?**
-Yes. AI enhancement is optional. You can open the viewer, zoom up to 10x, and pan without ever using the AI feature.
+Yes. You can use the viewer, zoom, and pan without AI. AI enhancement supports both manual and automatic triggering. In settings, you can configure automatic enhancement when opening an image or first zooming in, or trigger it manually when needed.
 
 **What if my device is slow?**
 Use speed-first mode and set a lower maximum processing size. If processing is still too slow or unavailable, the standard viewer and zoom remain fully functional.
@@ -142,7 +142,7 @@ It may make the text look sharper, but the reconstructed characters are generate
 
 ---
 
-## Suggested Internal Links
+## Related Guides
 
 - [How to zoom images on web pages: setup, use, and troubleshooting](/zoom-images-on-web-pages/)
 - [AI image upscaler Chrome extension: buyer criteria and how Click Image Zoom fits](/ai-image-upscaler-chrome-extension/)

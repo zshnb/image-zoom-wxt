@@ -130,7 +130,7 @@ Real-ESRGAN is an open-source model used in many tools. The specific version and
 
 ---
 
-## Suggested Internal Links
+## Related Guides
 
 - [How to zoom images on web pages: setup, use, and troubleshooting](/zoom-images-on-web-pages/)
 - [Local AI image upscaler: how it works and what to expect](/local-ai-image-upscaler/)

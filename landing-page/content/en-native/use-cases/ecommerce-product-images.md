@@ -77,7 +77,7 @@ No. The AI enhancement runs locally on your device using Real-ESRGAN. Image pixe
 The extension operates at the browser level and can open any image you can load in Chrome. Whether a specific site's images respond well to zoom depends on the resolution the site serves. No site-specific compatibility is guaranteed.
 
 **Can I use it without enabling AI enhancement?**
-Yes. The viewer, 10x zoom, and pan controls work independently. AI enhancement is optional and triggered separately.
+Yes. The viewer, 10x zoom, and pan controls work independently. AI enhancement is optional: trigger it manually or configure automatic triggering when opening an image or first zooming in.
 
 **What if AI processing is unavailable on my device?**
 The extension falls back gracefully. The viewer, normal zoom, pan, and standard clarity mode remain usable.
@@ -90,7 +90,7 @@ You can set a maximum local AI processing size in the extension settings to mana
 
 ---
 
-## Suggested internal links
+## Related guides
 
 - [Browsing image-heavy sites and image search grids](/use-cases/image-search/)
 - [Reading charts, screenshots, and diagrams](/use-cases/charts-and-screenshots/)
@@ -99,6 +99,6 @@ You can set a maximum local AI processing size in the extension settings to mana
 
 ## Sources and scope
 
-Facts on this page are drawn from Click Image Zoom product documentation and the official Chrome Web Store listing. Retailer-specific compatibility, including Amazon compatibility, has not been independently verified for this draft.
+Facts on this page are drawn from Click Image Zoom product documentation and the official Chrome Web Store listing. Retailer-specific compatibility, including Amazon compatibility, has not been independently verified.
 
 **Last reviewed:** July 31, 2026

@@ -63,7 +63,7 @@ No account is required for the documented core workflow.
 - Local processing speed depends on image dimensions, browser support, and device capability.
 - The extension does not control how the original website stores or serves its images.
 - Compatibility with browsers other than Chrome is not documented.
-- Current pricing and availability should be verified on the Chrome Web Store listing.
+- The extension and local AI enhancement are free. Use the Chrome Web Store for installation availability.
 
 ## What This Page Does Not Claim
 

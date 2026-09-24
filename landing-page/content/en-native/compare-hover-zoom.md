@@ -133,7 +133,7 @@ The extension does not control how individual websites store or serve their imag
 
 ---
 
-## Suggested Internal Links
+## Related Guides
 
 - [Pricing and access](/pricing/)
 - [Frequently asked questions](/faq/)

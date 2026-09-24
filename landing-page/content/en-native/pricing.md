@@ -1,15 +1,15 @@
 ---
 route: /en/pricing/
-title: "Is Click Image Zoom Free? Pricing and Hidden Costs Explained"
-meta_description: "Check Click Image Zoom access, account requirements, and local processing costs, plus where to verify current availability and pricing."
+title: "Click Image Zoom Is Free: Viewer and Local AI Included"
+meta_description: "Click Image Zoom is free, including local 4x AI enhancement, zoom, and pan. No account or subscription required; processing uses your device."
 primary_intent: access and pricing questions
 workbench_qids: [q107, q108]
 status: draft
 ---
 
-# Is Click Image Zoom Free or Does It Have a Paid Version?
+# Click Image Zoom Is Free, Including Local AI Enhancement
 
-Click Image Zoom is available on the Chrome Web Store. No account is required for the documented core workflow—opening images in the viewer, zooming up to 10x, and panning. Check the Chrome Web Store listing directly for current pricing and availability, as terms can change.
+Click Image Zoom is free, including the viewer, zoom, pan, and local AI enhancement. No account or subscription is required.
 
 ---
 
@@ -31,13 +31,13 @@ This is meaningfully different from tools that require you to upload images to a
 
 ---
 
-## The Chrome Web Store Is the Source of Truth for Price
+## What Is Included for Free
 
-Pricing for Chrome extensions can change. The only authoritative, up-to-date source for what Click Image Zoom currently costs—or whether it has a free tier, a paid tier, or a one-time purchase—is the official Chrome Web Store listing:
+The viewer, zoom up to 10x, drag-to-pan controls, standard clarity mode, and optional local 4x AI enhancement are all free. You do not need to purchase an upgrade or subscribe to use these features. Install the extension from its official listing:
 
-**https://chromewebstore.google.com/detail/ai-image-upscaler-zoom-%E2%80%93/lmlmlkdfgcbickfngnhnmfajmenoeoll**
+[Install Click Image Zoom from the Chrome Web Store](https://chromewebstore.google.com/detail/ai-image-upscaler-zoom-%E2%80%93/lmlmlkdfgcbickfngnhnmfajmenoeoll)
 
-This page reflects the current state. Do not rely on third-party review sites or cached screenshots for pricing; check the listing before installing.
+As of September 9, 2026, all of the features listed above are included at no charge. You can choose manual AI enhancement or configure it to run automatically when opening an image or first zooming in.
 
 ---
 
@@ -46,7 +46,7 @@ This page reflects the current state. Do not rely on third-party review sites or
 "Hidden cost" for a browser extension usually means one of three things: a subscription you didn't expect, data you didn't know was being collected, or device resources you didn't realize were being consumed. Here is how each applies to Click Image Zoom.
 
 **Unexpected subscription or payment**
-The Chrome Web Store listing is the authoritative source. Read it before installing. If a payment is required, the store will show it.
+The extension and its local AI enhancement are free. There is no subscription or per-image enhancement charge.
 
 **Data collection**
 Image pixels are not uploaded to a cloud AI service for enhancement. The extension does not control how the original website stores or serves its images—it only reads what the browser already loaded. Review the extension's permissions on the store listing if you want to understand exactly what browser access it requests.
@@ -70,7 +70,7 @@ If AI enhancement is unavailable—because the image exceeds your size limit, or
 | Processing modes | Speed-first and quality-first | Product documentation, 2026-07-29 |
 | Cloud AI pixel upload | None for enhancement | Product documentation, 2026-07-29 |
 | Account required | No, for documented core workflow | Product documentation, 2026-07-29 |
-| Current price | See Chrome Web Store listing | Chrome Web Store (verify at install time) |
+| Current price | Free, including local AI enhancement | Product owner confirmation, 2026-09-09 |
 
 ---
 
@@ -97,17 +97,17 @@ No account is required for the documented core workflow, including the viewer, z
 The computation runs on your device. There is no per-use cloud fee, but it does consume CPU/GPU and memory. You can limit the maximum processing size in the extension settings to control resource use.
 
 **Where do I find the current price?**
-The Chrome Web Store listing is the only authoritative source. Check it directly before installing.
+Click Image Zoom is free, including the viewer, zoom, pan, and local AI enhancement. No account or subscription is required.
 
 **What happens if my device can't run the AI model?**
 The viewer, normal zoom, pan, and standard clarity mode remain usable. The fallback is functional.
 
 **Is there a subscription for AI enhancement?**
-No cloud AI subscription is required for the documented enhancement workflow, because processing is local. Check the Chrome Web Store listing for any current pricing on the extension itself.
+No. Local AI enhancement is included for free and does not require a subscription. Processing uses your device rather than a paid cloud AI service.
 
 ---
 
-## Suggested Internal Links
+## Related Guides
 
 - [How to zoom images on webpages](/zoom-images-on-web-pages/)
 - [Compare Click Image Zoom with other approaches](/compare-hover-zoom/)
@@ -117,6 +117,6 @@ No cloud AI subscription is required for the documented enhancement workflow, be
 
 ## Sources and Scope
 
-Facts on this page are drawn from Click Image Zoom product documentation (last verified 2026-07-30) and the official Chrome Web Store listing. Pricing information is not stated here as a permanent fact; verify current terms at the Chrome Web Store before installing.
+Facts on this page are drawn from Click Image Zoom product documentation (last verified 2026-07-30) and the official Chrome Web Store listing. The product owner confirmed that the extension and local AI enhancement are free on 2026-09-09.
 
-**Last reviewed: July 31, 2026**
+**Last reviewed: September 9, 2026**

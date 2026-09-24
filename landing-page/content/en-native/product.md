@@ -45,7 +45,7 @@ The AI enhancement feature runs Real-ESRGAN on your device to produce a 4x upsca
 - **Modes:** speed-first (faster processing, lower resource use) and quality-first (more processing time, higher output quality).
 - **Processing size limit:** configurable by the user to manage device resource use.
 
-You trigger enhancement manually. It does not run automatically on every image you open.
+AI enhancement supports both manual and automatic triggering. In settings, you can configure automatic enhancement when opening an image or first zooming in, or trigger it manually when needed.
 
 ## What Local AI Enhancement Can and Cannot Do
 
@@ -128,7 +128,7 @@ It depends on your workflow. If you frequently inspect images while browsing and
 No. Very large images may be excluded by the configurable processing size limit. Images where the source is fundamentally low-information will be enhanced in appearance but not in factual accuracy.
 
 **Can I use the viewer without enabling AI?**
-Yes. AI enhancement is optional and triggered manually. The viewer, zoom, and pan work independently.
+Yes. The viewer, zoom, and pan work independently of AI. AI enhancement supports both manual and automatic triggering. In settings, you can configure automatic enhancement when opening an image or first zooming in, or trigger it manually when needed.
 
 **How does it handle images that are already high-resolution?**
 The viewer and zoom work normally. AI enhancement on an already high-resolution image may produce minimal visible change, since the model is designed to recover detail in low-resolution inputs.

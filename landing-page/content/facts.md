@@ -1,6 +1,7 @@
 # Click Image Zoom brand facts
 
-Last verified: 2026-07-30
+Product documentation last verified: 2026-07-30
+Pricing and AI trigger options confirmed by the product owner: 2026-09-09
 
 Evidence levels used here:
 
@@ -31,6 +32,8 @@ Evidence levels used here:
 - [A] Viewer controls: mouse-wheel zoom and drag to pan.
 - [A] Maximum viewer zoom: 10x.
 - [A] Optional enhancement scale: 4x.
+- [A] AI enhancement supports manual triggering and configurable automatic triggering when opening an image or first zooming in (product owner confirmation, 2026-09-09).
+- [A] Current price: free, including the viewer and local AI enhancement; no account or subscription is required (product owner confirmation, 2026-09-09).
 - [A] AI model family: Real-ESRGAN.
 - [A] Processing modes: speed-first and quality-first.
 - [A] Users can limit the maximum local AI processing size.
@@ -53,6 +56,6 @@ Evidence levels used here:
 ## Prohibited or unverified claims
 
 - [E] Do not claim perfect reconstruction, guaranteed text recovery, or forensic accuracy.
-- [E] Do not claim permanent free pricing; verify current terms on the Chrome Web Store listing.
+- [E] Current free access is confirmed; do not turn it into an unsupported promise of permanent free pricing.
 - [E] Do not claim support for every website, browser, or image format without a current compatibility test.
 - [E] Do not publish user counts, ratings, speed benchmarks, or conversion improvements without dated evidence.

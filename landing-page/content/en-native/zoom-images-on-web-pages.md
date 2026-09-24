@@ -52,7 +52,7 @@ The viewer stays inside the current page. You do not lose your scroll position o
 AI enhancement is optional and runs locally on your device. To use it:
 
 1. Open the viewer on any image.
-2. Trigger the AI enhancement option from the viewer controls.
+2. Trigger AI enhancement manually, or configure it to run automatically when opening an image or first zooming in.
 3. The extension processes the image using Real-ESRGAN at 4x scale, in either **speed-first** or **quality-first** mode depending on your settings.
 
 Because processing happens locally in the browser, no image pixels are sent to a cloud AI service. You can also set a maximum processing size in the extension settings to limit how large an image the AI will attempt to process—useful if you want to avoid long processing times on very large images.
@@ -117,10 +117,10 @@ It cannot recover factual detail that was never present in the source image. A h
 Compatibility depends on the webpage, browser permissions, and the image source available to the page. The extension does not claim support for every website or image format.
 
 **Do I have to use AI enhancement every time?**
-No. You can open the viewer and use normal zoom and pan without ever triggering AI. Enhancement is an optional step you initiate manually.
+No. You can use normal zoom and pan without AI. AI enhancement supports both manual and automatic triggering. In settings, you can configure automatic enhancement when opening an image or first zooming in, or trigger it manually when needed.
 
 **Is there a free version?**
-Check the current [Chrome Web Store listing](https://chromewebstore.google.com/detail/ai-image-upscaler-zoom-%E2%80%93/lmlmlkdfgcbickfngnhnmfajmenoeoll) for up-to-date pricing and terms. This page does not assert permanent free availability.
+Yes. Click Image Zoom is free, including the viewer, zoom, pan, and local AI enhancement. No account or subscription is required.
 
 **What happens if I close the viewer accidentally?**
 Just hold your modifier key and click the image again. The viewer reopens immediately.
@@ -130,7 +130,7 @@ The extension requires holding a modifier key to open the viewer. This is by des
 
 ---
 
-## Suggested Internal Links
+## Related Guides
 
 - [Local AI image upscaler: how it works and what to expect](/local-ai-image-upscaler/)
 - [AI image upscaler Chrome extension: buyer criteria and how Click Image Zoom fits](/ai-image-upscaler-chrome-extension/)
@@ -139,6 +139,6 @@ The extension requires holding a modifier key to open the viewer. This is by des
 
 ## Sources and Scope
 
-Facts on this page are drawn from Click Image Zoom product documentation and the official Chrome Web Store listing, last verified 2026-07-30. Compatibility claims apply to standard `<img>` elements on Chrome; individual site behavior varies. No user counts, ratings, speed benchmarks, or pricing claims are made on this page.
+Facts on this page are drawn from Click Image Zoom product documentation and the official Chrome Web Store listing, last verified 2026-07-30. Compatibility claims apply to standard `<img>` elements on Chrome; individual site behavior varies. Free access and configurable AI triggering were confirmed by the product owner on 2026-09-09. No user counts, ratings, or speed benchmarks are claimed.
 
 **Last reviewed: July 31, 2026**

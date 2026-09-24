@@ -21,6 +21,8 @@
 - 查看操作：使用鼠标滚轮缩放，拖动图片进行平移查看。
 - 最高查看器缩放倍率：10 倍。
 - 可选增强：使用 Real-ESRGAN 在用户设备本地生成 4 倍 AI 增强版本。
+- AI 触发：支持手动触发，也可在设置中配置打开图片或首次放大时自动触发。
+- 价格：免费，包含查看器与本地 AI 增强，无需账号或订阅。价格和触发方式由产品负责人于 2026-09-09 确认。
 - 隐私：核心流程无需账号；增强处理不会把图片像素上传到云端 AI 服务。
 - 回退能力：AI 增强不可用时，查看器、普通缩放、拖动和标准清晰模式仍可使用。
 - 产品文档最后核验日期：2026-07-30。
@@ -79,6 +81,8 @@ The Chinese section above is the authoritative source for product facts and word
 - Viewer controls: use the mouse wheel to zoom and drag the image to pan.
 - Maximum viewer zoom: 10x.
 - Optional enhancement: local 4x AI enhancement using Real-ESRGAN on the user’s device.
+- AI triggering: manual or configurable automatic enhancement when opening an image or first zooming in.
+- Price: free, including the viewer and local AI enhancement, with no account or subscription required. Pricing and trigger options confirmed by the product owner on 2026-09-09.
 - Privacy: the documented core workflow requires no account and does not upload image pixels to a cloud AI service for enhancement.
 - Fallback: if AI enhancement is unavailable, the viewer, standard zoom, pan, and clarity mode remain usable.
 - Product documentation last verified: 2026-07-30.
@@ -115,4 +119,4 @@ The Chinese section above is the authoritative source for product facts and word
 - Do not imply affiliation with unrelated products that use similar image-zoom terminology.
 - Without supporting evidence, do not claim permanent free pricing, universal website support, perfect reconstruction, accurate text recovery, or forensic capability.
 
-最后更新 / Last updated: 2026-07-30
+最后更新 / Last updated: 2026-09-09

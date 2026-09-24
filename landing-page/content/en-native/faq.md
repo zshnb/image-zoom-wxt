@@ -85,6 +85,9 @@ If you installed from a source other than the official Chrome Web Store, or if y
 
 ## AI Enhancement
 
+**Can AI enhancement run automatically?**
+AI enhancement supports both manual and automatic triggering. In settings, you can configure automatic enhancement when opening an image or first zooming in, or trigger it manually when needed.
+
 **What does the local AI enhancement do?**
 It applies 4x upscaling using Real-ESRGAN, running on your device. You can choose speed-first or quality-first processing. You can also set a maximum processing size to limit how much of your device's CPU/GPU and memory the enhancement uses.
 
@@ -99,7 +102,7 @@ If the AI model cannot run—because the image exceeds your size limit, or becau
 ## Pricing
 
 **Is Click Image Zoom free?**
-The Chrome Web Store listing is the only authoritative, current source for pricing. Terms can change; do not rely on third-party sites or cached information. Check the listing directly before installing.
+Yes. Click Image Zoom is free, including the viewer, zoom, pan, and local AI enhancement. No account or subscription is required.
 
 **Are there hidden costs?**
 No cloud AI subscription is required for the documented workflow. The real resource cost is local: AI enhancement uses your device's CPU/GPU and memory. You can control this by setting a maximum processing size in the extension settings.
@@ -120,7 +123,7 @@ No cloud AI subscription is required for the documented workflow. The real resou
 
 ---
 
-## Suggested Internal Links
+## Related Guides
 
 - [Pricing and access](/pricing/)
 - [Compare Click Image Zoom with other approaches](/compare-hover-zoom/)
