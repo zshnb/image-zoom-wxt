@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "AI图片高清放大器 - 网页图片缩放",
+    "message": "Click Image Zoom｜浏览器图片放大插件",
     "description": "扩展名称"
   },
   "extDescription": {
-    "message": "本地 AI 图片高清放大器，支持网页图片快捷缩放、拖动查看和 4 倍增强。",
+    "message": "浏览器图片放大插件：按住快捷键点击网页图片，在原页面打开查看器，滚轮放大至 10 倍并拖动查看；可选本地 4 倍 AI 增强。",
     "description": "扩展短描述"
   },
   "popupActivationKey": {

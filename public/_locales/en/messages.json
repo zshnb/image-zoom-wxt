@@ -1,10 +1,10 @@
 {
   "extName": {
-    "message": "AI Image Upscaler & Zoom – Click Image Zoom",
+    "message": "Click Image Zoom – Web Image Viewer",
     "description": "Extension name"
   },
   "extDescription": {
-    "message": "Local AI image upscaler for web images with shortcut zoom, pan, and 4x enhancement.",
+    "message": "Image zoom extension for web pages. Hold a key and click a webpage image to zoom up to 10x, pan, or use optional local 4x AI.",
     "description": "Short extension description"
   },
   "popupActivationKey": {
