@@ -2,7 +2,7 @@
   "name": "image-zoom-wxt",
   "description": "Local AI image upscaler and zoom viewer for web images with shortcut click, wheel zoom, and drag-to-pan.",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
