@@ -12,15 +12,19 @@ Deploy the contents of `dist/` to any static host. The host should serve `/path/
 
 ## Cloudflare Pages
 
-Use the native Git integration to build the complete GitHub repository on each production-branch push. Choose the repository and branch that hold this project, then configure:
+The `click-image-zoom` Pages project is linked to [zshnb/image-zoom-wxt](https://github.com/zshnb/image-zoom-wxt) through Cloudflare’s native Git integration. Its Pages address is https://click-image-zoom.pages.dev. The project uses these settings:
 
 - Framework preset: None
+- Production branch: `main`; other branches receive preview deployments
+- Build watch paths: `landing-page/*`, `native-host/*`
 - Root directory: `landing-page`
 - Build command: `node scripts/build.mjs && node scripts/check.mjs`
 - Build output directory: `dist`
 - Environment variables for production and previews: `SKIP_DEPENDENCY_INSTALL=true`, `NODE_VERSION=24.18.0`
 
-The checkout must include the sibling `native-host/` directory because the build copies its two installer files into the website. The static site needs no additional packages or GitHub Actions deployment secrets.
+Pushes to `main` that change either watched path automatically build, run checks, and deploy to production. Matching pushes on other branches create previews. Pull-request deployment comments are disabled. No GitHub Actions workflow or additional deployment token is required.
+
+The checkout must include the sibling `native-host/` directory because the build copies its two installer files into the website. The static site needs no additional packages. SEO canonical URLs continue to use https://imagezoom.zshnb.com; custom-domain DNS is configured separately.
 
 `public/404.html` is copied to the output root so Cloudflare serves a real not-found page instead of its default SPA homepage fallback. `public/_redirects` supplies the permanent legacy-URL redirects. After deployment, verify a random missing URL returns HTTP 404, a retired URL returns 301, and both local AI guides return 200 without a redirect.
 
