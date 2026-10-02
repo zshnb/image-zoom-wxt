@@ -1,0 +1,43 @@
+<p>This Privacy Policy explains how Click Image Zoom handles information when you use the Chrome extension or visit imagezoom.zshnb.com. The extension is designed to inspect and enhance webpage images on your device. It does not require an account and does not send image pixels to a Click Image Zoom cloud AI service.</p>
+<p><strong>Effective date:</strong> August 17, 2026. <strong>Last updated:</strong> September 30, 2026.</p>
+<h2>Information the Extension Processes</h2>
+<p>The extension processes only the information needed to provide the feature you request. The viewer runs inside Chrome. Optional native AI processing runs in a separately installed local helper on the same device.</p>
+<div class="tableWrap"><table><thead><tr><th>Information</th><th>Why it is processed</th><th>Where it is handled</th></tr></thead><tbody><tr><td>Selected webpage image URL and image bytes</td><td>Open the viewer, zoom, download, or run optional enhancement</td><td>In Chrome and, for native AI, in a local helper with temporary files on the same device. The original may be fetched directly from its source website</td></tr><tr><td>Shortcut, enhancement mode, AI model, trigger preference, and size limit</td><td>Remember your settings</td><td>Chrome local extension storage</td></tr><tr><td>Disabled website hostnames</td><td>Remember sites where you turned the extension off</td><td>Chrome local extension storage</td></tr><tr><td>Download filename and image data</td><td>Save an image only after you request a download</td><td>Chrome's download system</td></tr><tr><td>Diagnostic details such as source hostname, byte size, MIME type, duration, and errors</td><td>Help diagnose a local image-fetch or enhancement failure</td><td>Your browser's local extension console; not transmitted to us</td></tr></tbody></table></div>
+<p>The extension does not intentionally collect your browsing history, page text, passwords, payment details, personal messages, or form entries. It does not use analytics, advertising trackers, behavioral profiles, or remote crash-reporting services.</p>
+<h2>How Webpage Images Are Accessed</h2>
+<p>When you deliberately trigger the viewer on an image, the extension reads candidate image URLs already available to the webpage. If browser security rules prevent the page from reading the image pixels directly, the extension's background process may request that image from the website that serves it. Same-origin requests may use the browser credentials already associated with that website; cross-origin image requests omit credentials. Private and local network addresses are rejected, redirects are not followed, non-image responses are rejected, and input size is limited.</p>
+<p>This request goes to the source website or image host, not to a Click Image Zoom image-processing server. The source website remains responsible for its own hosting, logs, cookies, access controls, and privacy practices.</p>
+<h2>Local Enhancement and Native Processing</h2>
+<p>When AI clarity is triggered, the extension automatically tries the optional local Real-ESRGAN helper first. The helper is installed separately and uses the <code>realesrgan-ncnn-vulkan</code> command with local <code>.param</code>/<code>.bin</code> model files. Chrome Native Messaging sends the selected image data and model choice to <code>com.image_zoom.esrgan</code> on your own device and returns the result. This process runs outside Chrome, without uploading pixels to a cloud AI service.</p>
+<p>The helper writes temporary image input and output files while the CLI runs and removes its temporary directory after the operation. Its installed configuration records the local CLI and model-directory paths. Uninstalling the extension does not remove a separately installed helper, CLI, or model files.</p>
+<p>If the helper is unavailable or fails, the extension tries its browser Real-ESRGAN fallback through LiteRT/WebGPU. That path processes image tiles and output in memory on your device and depends on browser and GPU support. If browser AI also fails, Lanczos sharpening keeps the viewer usable. The original image may still be fetched from its source website; neither enhancement path uploads pixels to a Click Image Zoom cloud AI service. See the <a href="/local-ai-image-upscaler/">local AI setup guide</a> for installation and platform limits.</p>
+<h2>Browser Permissions</h2>
+<p>Click Image Zoom requests permissions for specific product functions:</p>
+<ul>
+<li><strong>Storage</strong> saves your extension preferences and disabled-site list locally.</li>
+<li><strong>Downloads</strong> saves an image only after you choose a download action.</li>
+<li><strong>Native Messaging</strong> allows communication with the optional local enhancement helper described above.</li>
+<li><strong>Website access for HTTP and HTTPS pages</strong> lets the content script identify selected images and lets the background process retrieve an image when normal page access is blocked by cross-origin restrictions.</li>
+</ul>
+<p>You can review and revoke extension permissions through Chrome. Removing the extension removes its Chrome-managed local storage according to Chrome's behavior.</p>
+<h2>Website Data</h2>
+<p>The public website is a static product and documentation site. It does not provide accounts, contact forms, analytics scripts, or advertising trackers, and it does not intentionally set tracking cookies. The hosting and network providers that deliver the site may process standard request metadata such as IP address, user agent, requested URL, timestamp, and security signals under their own operational policies.</p>
+<p>If you email us, your email address and message are processed by the email provider so that we can read and respond. Do not send sensitive image files, passwords, financial information, or other confidential data by email.</p>
+<h2>Storage, Retention, and Sharing</h2>
+<p>Extension preferences remain in Chrome local extension storage until you change them, reset browser data, or uninstall the extension. Image data used by the viewer and enhancement workflow is handled transiently for the requested operation and is not intentionally stored by Click Image Zoom as an online user record.</p>
+<p>We do not sell personal information. We do not share extension image pixels or settings with advertisers or data brokers. Information may be disclosed only when required by applicable law or when necessary to protect users, the service, or legal rights.</p>
+<h2>Security and Your Choices</h2>
+<p>No software can guarantee absolute security. Keep Chrome and the extension updated, review requested permissions, and avoid processing images you are not authorized to access. You can disable Click Image Zoom for individual hostnames, choose a non-AI mode, limit AI input size, remove downloaded files, clear Chrome extension data, or uninstall the extension.</p>
+<h2>Changes to This Policy</h2>
+<p>We may update this policy when product behavior, permissions, or legal requirements change. Material changes will be reflected by the updated date on this page. The current version published at this URL controls.</p>
+<h2>Sources and Scope</h2>
+<p>This policy reflects the current extension manifest, Chrome local-storage definitions, image-fetch safeguards, local enhancement paths, native-message flow, and static website implementation reviewed on September 30, 2026. It describes Click Image Zoom behavior and does not replace the privacy policies of Chrome, source websites, email providers, hosting providers, or other third parties.</p>
+<h2>Frequently Asked Questions</h2>
+<p><strong>Are webpage images uploaded to Click Image Zoom servers?</strong></p>
+<p>No. The extension may fetch an image directly from its source website, but it does not send image pixels to a Click Image Zoom cloud AI service for enhancement.</p>
+<p><strong>Does the extension track which pages I visit?</strong></p>
+<p>No analytics or remote browsing-history collection is implemented. A hostname is stored locally only when needed for your per-site enable or disable preference, and local diagnostic logs may include a source hostname.</p>
+<p><strong>How can I contact you about privacy?</strong></p>
+<p>Email a857681664@gmail.com. Include “Click Image Zoom privacy” in the subject and do not attach sensitive images.</p>
+<h2>Contact</h2>
+<p>For privacy questions or requests, email <a href="mailto:a857681664@gmail.com">a857681664@gmail.com</a>. Click Image Zoom is the product and publisher name used by this website and its Chrome Web Store listing.</p>

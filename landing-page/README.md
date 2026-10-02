@@ -10,6 +10,20 @@ pnpm check    # build, then run SEO checks
 
 Deploy the contents of `dist/` to any static host. The host should serve `/path/` from `/path/index.html`.
 
+## Cloudflare Pages
+
+Use the native Git integration to build the complete GitHub repository on each production-branch push. Choose the repository and branch that hold this project, then configure:
+
+- Framework preset: None
+- Root directory: `landing-page`
+- Build command: `node scripts/build.mjs && node scripts/check.mjs`
+- Build output directory: `dist`
+- Environment variables for production and previews: `SKIP_DEPENDENCY_INSTALL=true`, `NODE_VERSION=24.18.0`
+
+The checkout must include the sibling `native-host/` directory because the build copies its two installer files into the website. The static site needs no additional packages or GitHub Actions deployment secrets.
+
+`public/404.html` is copied to the output root so Cloudflare serves a real not-found page instead of its default SPA homepage fallback. `public/_redirects` supplies the permanent legacy-URL redirects. After deployment, verify a random missing URL returns HTTP 404, a retired URL returns 301, and both local AI guides return 200 without a redirect.
+
 ## Pages and local AI
 
 The build generates six pages: `/`, `/zh-cn/`, `/local-ai-image-upscaler/`, `/zh-cn/local-ai-image-upscaler/`, `/privacy/`, and `/terms/`.
@@ -45,9 +59,10 @@ The build then renders a `<video>` and adds `VideoObject` structured data. Updat
 
 ## Redirects after launch
 
-The old site had more URLs. If the host supports redirects, 301 these to the new pages:
+The old site had more URLs. `public/_redirects` implements these Cloudflare Pages 301 mappings:
 
-- `/en/*` → same path without `/en`
+- `/en/privacy/`, `/en/terms/`, `/en/local-ai-image-upscaler/` → their corresponding current pages without `/en`
+- `/en/ai-image-upscaler-chrome-extension/` → `/#ai-upscaler`; other retired `/en/*` pages → `/`
 - `/about/`, `/product/`, `/product.md`, `/pricing/`, `/faq/`, `/compare-hover-zoom/`, `/zoom-images-on-web-pages/`, `/use-cases/*` → `/`
 - `/ai-image-upscaler-chrome-extension/` → `/#ai-upscaler`
 - `/zh-cn/zoom-images-on-web-pages/` → `/zh-cn/`

@@ -91,4 +91,22 @@ for (const path of Object.keys(pages)) assert.ok(sitemap.includes(`<loc>${site}$
 assert.ok((await readFile('dist/robots.txt', 'utf8')).includes(`Sitemap: ${site}/sitemap.xml`), 'robots sitemap')
 assert.ok(existsSync('dist/og-image.jpg'), 'og image')
 
-console.log(`SEO checks passed for ${Object.keys(pages).length} pages`)
+const notFound = await readFile('dist/404.html', 'utf8')
+assert.match(notFound, /<h1>Page not found<\/h1>/, '404 has a not-found message')
+assert.match(notFound, /name="robots" content="noindex, follow"/, '404 is not indexable')
+assert.doesNotMatch(notFound, /data-demo|id="hero-title"/, '404 does not serve the homepage demo')
+
+const redirects = (await readFile('dist/_redirects', 'utf8')).split('\n').filter((line) => line && !line.startsWith('#')).map((line) => line.split(/\s+/))
+for (const [source, target, status] of redirects) {
+  assert.equal(status, '301', `${source} is a permanent redirect`)
+  assert.ok(source.startsWith('/') && target.startsWith('/'), `${source} local redirect`)
+  const [path, anchor] = target.split('#')
+  const html = await readFile(`dist${path}index.html`, 'utf8')
+  if (anchor) assert.ok(html.includes(`id="${anchor}"`), `${source} target anchor exists`)
+  const pattern = new RegExp(`^${source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('\\*', '.*')}$`)
+  for (const guide of ['/local-ai-image-upscaler/', '/zh-cn/local-ai-image-upscaler/']) {
+    assert.ok(!pattern.test(guide), `${source} does not redirect current guide ${guide}`)
+  }
+}
+
+console.log(`SEO and Pages hosting checks passed for ${Object.keys(pages).length} pages`)

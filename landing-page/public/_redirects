@@ -1,0 +1,39 @@
+# Retained English pages moved out of /en/.
+/en / 301
+/en/ / 301
+/en/privacy /privacy/ 301
+/en/privacy/ /privacy/ 301
+/en/terms /terms/ 301
+/en/terms/ /terms/ 301
+/en/local-ai-image-upscaler /local-ai-image-upscaler/ 301
+/en/local-ai-image-upscaler/ /local-ai-image-upscaler/ 301
+/en/ai-image-upscaler-chrome-extension /#ai-upscaler 301
+/en/ai-image-upscaler-chrome-extension/ /#ai-upscaler 301
+
+# Retired overview pages now live on the homepage.
+/about / 301
+/about/ / 301
+/product / 301
+/product/ / 301
+/product.md / 301
+/pricing / 301
+/pricing/ / 301
+/faq / 301
+/faq/ / 301
+/compare-hover-zoom / 301
+/compare-hover-zoom/ / 301
+/zoom-images-on-web-pages / 301
+/zoom-images-on-web-pages/ / 301
+/use-cases / 301
+/use-cases/ / 301
+/ai-image-upscaler-chrome-extension /#ai-upscaler 301
+/ai-image-upscaler-chrome-extension/ /#ai-upscaler 301
+/zh-cn/zoom-images-on-web-pages /zh-cn/ 301
+/zh-cn/zoom-images-on-web-pages/ /zh-cn/ 301
+/zh-cn/ai-image-upscaler-chrome-extension /zh-cn/#ai-upscaler 301
+/zh-cn/ai-image-upscaler-chrome-extension/ /zh-cn/#ai-upscaler 301
+
+# Known retired route families. Keep current local AI guides directly served.
+/en/use-cases/* / 301
+/use-cases/* / 301
+/en/* / 301
